@@ -115,62 +115,97 @@ function handleDataMessage(raw: string) {
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 
 const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-const ws = new WebSocket(`${proto}://${location.host}/signal`)
+let ws: WebSocket
+let reconnectDelay = 1000
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
-ws.onopen = () => {
-    setStatus(`Joining room "${room}"…`, 'waiting')
-    ws.send(JSON.stringify({ type: 'join', room }))
+function resetPeerState() {
+    if (pc) { pc.close(); pc = null }
+    channel = null
+    connected = false
+    remoteDescSet = false
+    pendingCandidates.length = 0
+    enableChat(false)
 }
 
-ws.onclose = () => setStatus('Disconnected from server', 'error')
+function connect() {
+    ws = new WebSocket(`${proto}://${location.host}/signal`)
 
-ws.onmessage = async ({ data }) => {
-    const msg = JSON.parse(data as string)
-    switch (msg.type) {
-        case 'joined':
-            if (msg.peers === 0) {
-                setStatus('Waiting for peer to join…', 'waiting')
-            } else {
-                setStatus('Peer found — connecting…', 'waiting')
-                await initPeerConnection(true)
+    ws.onopen = () => {
+        reconnectDelay = 1000
+        setStatus(`Joining room "${room}"…`, 'waiting')
+        ws.send(JSON.stringify({ type: 'join', room }))
+
+        // Heartbeat every 25s — keeps Railway's proxy from closing idle connections
+        if (heartbeatTimer) clearInterval(heartbeatTimer)
+        heartbeatTimer = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }))
             }
-            break
-        case 'peer-joined':
-            playPing()
-            appendSystem('A peer joined the room')
-            setStatus('Peer joined — connecting…', 'waiting')
-            await initPeerConnection(false)
-            break
-        case 'offer': {
-            await pc!.setRemoteDescription(new RTCSessionDescription(msg))
-            remoteDescSet = true
-            await drainCandidates()
-            const answer = await pc!.createAnswer()
-            await pc!.setLocalDescription(answer)
-            ws.send(JSON.stringify(pc!.localDescription))
-            break
+        }, 25_000)
+    }
+
+    ws.onclose = () => {
+        if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null }
+        resetPeerState()
+        setStatus(`Reconnecting in ${reconnectDelay / 1000}s…`, 'error')
+        setTimeout(() => {
+            reconnectDelay = Math.min(reconnectDelay * 2, 16_000)
+            connect()
+        }, reconnectDelay)
+    }
+
+    ws.onmessage = async ({ data }) => {
+        const msg = JSON.parse(data as string)
+        switch (msg.type) {
+            case 'pong': break  // heartbeat reply — ignore
+            case 'joined':
+                if (msg.peers === 0) {
+                    setStatus('Waiting for peer to join…', 'waiting')
+                } else {
+                    setStatus('Peer found — connecting…', 'waiting')
+                    await initPeerConnection(true)
+                }
+                break
+            case 'peer-joined':
+                playPing()
+                appendSystem('A peer joined the room')
+                setStatus('Peer joined — connecting…', 'waiting')
+                await initPeerConnection(false)
+                break
+            case 'offer': {
+                await pc!.setRemoteDescription(new RTCSessionDescription(msg))
+                remoteDescSet = true
+                await drainCandidates()
+                const answer = await pc!.createAnswer()
+                await pc!.setLocalDescription(answer)
+                ws.send(JSON.stringify(pc!.localDescription))
+                break
+            }
+            case 'answer':
+                await pc!.setRemoteDescription(new RTCSessionDescription(msg))
+                remoteDescSet = true
+                await drainCandidates()
+                break
+            case 'candidate':
+                if (remoteDescSet) {
+                    await pc!.addIceCandidate(new RTCIceCandidate(msg.candidate))
+                } else {
+                    pendingCandidates.push(msg.candidate)
+                }
+                break
+            case 'peer-left':
+                appendSystem('Peer left the room')
+                setStatus('Peer disconnected', 'error')
+                enableChat(false)
+                connected = false
+                remoteVideo.srcObject = null
+                break
         }
-        case 'answer':
-            await pc!.setRemoteDescription(new RTCSessionDescription(msg))
-            remoteDescSet = true
-            await drainCandidates()
-            break
-        case 'candidate':
-            if (remoteDescSet) {
-                await pc!.addIceCandidate(new RTCIceCandidate(msg.candidate))
-            } else {
-                pendingCandidates.push(msg.candidate)
-            }
-            break
-        case 'peer-left':
-            appendSystem('Peer left the room')
-            setStatus('Peer disconnected', 'error')
-            enableChat(false)
-            connected = false
-            remoteVideo.srcObject = null
-            break
     }
 }
+
+connect()
 
 // ── WebRTC ────────────────────────────────────────────────────────────────────
 

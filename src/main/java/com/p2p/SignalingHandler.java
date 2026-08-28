@@ -37,6 +37,11 @@ public class SignalingHandler extends TextWebSocketHandler {
         JsonNode msg = mapper.readTree(message.getPayload());
         String type  = msg.get("type").asText();
 
+        if ("ping".equals(type)) {
+            send(session, Map.of("type", "pong"));
+            return;
+        }
+
         if ("join".equals(type)) {
             String room = msg.get("room").asText();
             session.getAttributes().put("room", room);
