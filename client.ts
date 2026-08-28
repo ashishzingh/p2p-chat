@@ -81,6 +81,223 @@ const sendBtn    = document.getElementById('send') as HTMLButtonElement
 const localLabel  = document.getElementById('local-label')!
 const remoteLabel = document.getElementById('remote-label')!
 
+// ── Diagnostics state ────────────────────────────────────────────────────────
+
+const diagState = {
+    localCandidates: [] as Array<{ type: string; protocol: string }>,
+    iceState:        'new',
+    gatheringState:  'new',
+    dcState:         'closed',
+    wsConnected:     false,
+    rtt:             -1,
+    bytesSent:       0,
+    bytesReceived:   0,
+    pairLocalType:   '',
+    pairRemoteType:  '',
+    iceCheckingStart: 0,
+}
+
+function resetDiagState() {
+    diagState.localCandidates  = []
+    diagState.iceState         = 'new'
+    diagState.gatheringState   = 'new'
+    diagState.dcState          = 'closed'
+    diagState.rtt              = -1
+    diagState.bytesSent        = 0
+    diagState.bytesReceived    = 0
+    diagState.pairLocalType    = ''
+    diagState.pairRemoteType   = ''
+    diagState.iceCheckingStart = 0
+    updateDiagnosticsUI()
+}
+
+function fmtBytes(n: number): string {
+    if (n < 1024) return `${n} B`
+    if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`
+    return `${(n / 1048576).toFixed(2)} MB`
+}
+
+function getDiagnosis(): { text: string; cls: 'ok' | 'warn' | 'error' } {
+    if (!diagState.wsConnected) {
+        return { text: '🔴 Cannot reach signaling server.\nCheck internet connection. If on VPN try disabling it.', cls: 'error' }
+    }
+
+    const ice = diagState.iceState
+    const srflx = diagState.localCandidates.filter(c => c.type === 'srflx').length
+
+    if (ice === 'connected' || ice === 'completed') {
+        const t = diagState.pairLocalType
+        if (t === 'relay')
+            return { text: '⚠️ Connected via TURN relay.\nDirect P2P was not possible on this network — traffic is being routed through a relay server. Connection works but has extra latency.\nFix: add a TURN server to the ICE config.', cls: 'warn' }
+        if (t === 'host')
+            return { text: '✅ Both peers on the same local network.\nDirect local connection — optimal.', cls: 'ok' }
+        return { text: '✅ Direct peer-to-peer connection over the internet.\nOptimal — no relay needed.', cls: 'ok' }
+    }
+
+    if (ice === 'failed') {
+        if (srflx === 0)
+            return { text: '🔴 STUN blocked — UDP to external servers is firewalled.\nICE could not discover a public IP. Ask the other person to:\n1. Switch to mobile hotspot\n2. Disable VPN / corporate proxy\n3. Try a different network\nLong-term fix: add TURN over TLS port 443 (looks like HTTPS, bypasses most firewalls).', cls: 'error' }
+        return { text: '🔴 Symmetric NAT detected.\nSTUN resolved a public IP but the router assigns a different port for each destination, so direct P2P failed.\nLong-term fix: add a TURN server to the ICE config.', cls: 'error' }
+    }
+
+    if (ice === 'disconnected') {
+        return { text: '⚠️ Connection dropped — attempting to recover.\nIf this persists the network is unstable.', cls: 'warn' }
+    }
+
+    if (ice === 'checking') {
+        const elapsed = diagState.iceCheckingStart ? (Date.now() - diagState.iceCheckingStart) / 1000 : 0
+        if (elapsed > 20)
+            return { text: `⚠️ Still checking after ${Math.round(elapsed)}s — unusually long.\nNetwork may be heavily firewalled. Try mobile hotspot.`, cls: 'warn' }
+        return { text: '⏳ Negotiating connection — trying candidate pairs…', cls: 'warn' }
+    }
+
+    return { text: '⏳ Waiting for the other person to join.', cls: 'warn' }
+}
+
+function updateDiagnosticsUI() {
+    // WebSocket row
+    const wsDot = document.getElementById('d-ws-dot')!
+    const wsVal = document.getElementById('d-ws-val')!
+    wsDot.className = `health-dot ${diagState.wsConnected ? 'ok' : 'error'}`
+    wsVal.textContent = diagState.wsConnected ? 'Connected' : 'Disconnected'
+
+    // ICE row
+    const iceDot = document.getElementById('d-ice-dot')!
+    const iceVal = document.getElementById('d-ice-val')!
+    const iceCls: Record<string, string> = {
+        new: '', checking: 'warn', connected: 'ok', completed: 'ok',
+        disconnected: 'warn', failed: 'error', closed: '',
+    }
+    iceDot.className = `health-dot ${iceCls[diagState.iceState] ?? ''}`
+
+    const typeLabel: Record<string, string> = {
+        host: 'local network', srflx: 'direct P2P', prflx: 'direct P2P', relay: 'via TURN relay',
+    }
+    let iceText = diagState.iceState
+    if ((diagState.iceState === 'connected' || diagState.iceState === 'completed') && diagState.pairLocalType) {
+        iceText += ` — ${typeLabel[diagState.pairLocalType] ?? diagState.pairLocalType}`
+        if (diagState.rtt >= 0) iceText += `, ${diagState.rtt}ms RTT`
+    }
+    iceVal.textContent = iceText
+
+    // Data channel row
+    const dcDot = document.getElementById('d-dc-dot')!
+    const dcVal = document.getElementById('d-dc-val')!
+    const dcMap: Record<string, string> = { open: 'ok', connecting: 'warn', closing: 'warn', closed: '' }
+    dcDot.className = `health-dot ${dcMap[diagState.dcState] ?? ''}`
+    dcVal.textContent = diagState.dcState
+
+    // Diagnosis box
+    const { text, cls } = getDiagnosis()
+    const box = document.getElementById('diag-box')!
+    box.textContent = text
+    box.className = `diag-box ${cls}`
+
+    // Candidate counts
+    const counts = { host: 0, srflx: 0, relay: 0, prflx: 0 }
+    diagState.localCandidates.forEach(c => { if (c.type in counts) (counts as Record<string,number>)[c.type]++ })
+
+    const setCount = (id: string, n: number, alarmIfZeroAndFailed: boolean) => {
+        const el = document.getElementById(id)!
+        el.textContent = String(n)
+        el.className = `cand-count${n === 0 ? ' zero' : ''}${alarmIfZeroAndFailed && n === 0 && diagState.iceState === 'failed' ? ' alarm' : ''}`
+    }
+    setCount('d-host-count',  counts.host,  false)
+    setCount('d-srflx-count', counts.srflx, true)
+    setCount('d-relay-count', counts.relay, false)
+
+    // Live stats
+    document.getElementById('d-rtt')!.textContent  = diagState.rtt >= 0 ? `${diagState.rtt} ms` : '—'
+    document.getElementById('d-sent')!.textContent = diagState.bytesSent > 0 ? fmtBytes(diagState.bytesSent) : '—'
+    document.getElementById('d-recv')!.textContent = diagState.bytesReceived > 0 ? fmtBytes(diagState.bytesReceived) : '—'
+    document.getElementById('d-gathering')!.textContent = diagState.gatheringState
+
+    const pair = diagState.pairLocalType && diagState.pairRemoteType
+        ? `${diagState.pairLocalType} ↔ ${diagState.pairRemoteType}`
+        : '—'
+    document.getElementById('d-pair')!.textContent = pair
+}
+
+async function pollStats() {
+    if (!pc) { updateDiagnosticsUI(); return }
+    try {
+        const stats = await pc.getStats()
+        const candMap = new Map<string, RTCIceCandidateStats>()
+        let activePair: RTCIceCandidatePairStats | null = null
+
+        stats.forEach((r: RTCStats) => {
+            const report = r as Record<string, unknown>
+            if (r.type === 'local-candidate' || r.type === 'remote-candidate')
+                candMap.set(r.id, r as unknown as RTCIceCandidateStats)
+            if (r.type === 'candidate-pair' && report['nominated'] === true)
+                activePair = r as unknown as RTCIceCandidatePairStats
+        })
+
+        if (activePair) {
+            const ap = activePair as Record<string, unknown>
+            const local  = candMap.get(ap['localCandidateId'] as string)
+            const remote = candMap.get(ap['remoteCandidateId'] as string)
+            diagState.rtt  = ap['currentRoundTripTime'] != null ? Math.round((ap['currentRoundTripTime'] as number) * 1000) : -1
+            diagState.bytesSent     = (ap['bytesSent']     as number) ?? 0
+            diagState.bytesReceived = (ap['bytesReceived'] as number) ?? 0
+            diagState.pairLocalType  = (local  as Record<string,unknown>)?.['candidateType'] as string ?? ''
+            diagState.pairRemoteType = (remote as Record<string,unknown>)?.['candidateType'] as string ?? ''
+        }
+    } catch { /* getStats may fail if PC is closing */ }
+    updateDiagnosticsUI()
+}
+
+let statsTimer: ReturnType<typeof setInterval> | null = null
+function startStatsPolling() {
+    if (statsTimer) return
+    pollStats()
+    statsTimer = setInterval(pollStats, 2000)
+}
+function stopStatsPolling() {
+    if (statsTimer) { clearInterval(statsTimer); statsTimer = null }
+}
+
+// Copy report
+document.getElementById('copy-report-btn')!.addEventListener('click', () => {
+    const counts = { host: 0, srflx: 0, relay: 0 }
+    diagState.localCandidates.forEach(c => { if (c.type in counts) (counts as Record<string,number>)[c.type]++ })
+    const { text } = getDiagnosis()
+
+    const lines = [
+        '── Interview Room Diagnostic Report ──',
+        `Room: ${room || '(not joined)'}`,
+        `Time: ${new Date().toLocaleTimeString()}`,
+        '',
+        `Signaling server: ${diagState.wsConnected ? 'Connected' : 'Disconnected'}`,
+        `ICE state:        ${diagState.iceState}`,
+        `Data channel:     ${diagState.dcState}`,
+        `ICE gathering:    ${diagState.gatheringState}`,
+        '',
+        'ICE Candidates gathered (local):',
+        `  Host  (local IP):  ${counts.host}`,
+        `  STUN  (public IP): ${counts.srflx}${counts.srflx === 0 ? '  ← UDP may be blocked' : ''}`,
+        `  TURN  (relay):     ${counts.relay}${counts.relay === 0 ? '  ← no TURN server configured' : ''}`,
+        '',
+        diagState.rtt >= 0          ? `RTT:              ${diagState.rtt} ms` : '',
+        diagState.pairLocalType     ? `Active path:      ${diagState.pairLocalType} ↔ ${diagState.pairRemoteType}` : '',
+        diagState.bytesSent > 0     ? `Bytes sent:       ${fmtBytes(diagState.bytesSent)}` : '',
+        diagState.bytesReceived > 0 ? `Bytes received:   ${fmtBytes(diagState.bytesReceived)}` : '',
+        '',
+        `Diagnosis: ${text.replace(/^[🔴✅⚠️⏳]\s*/, '')}`,
+        '',
+        `Browser: ${navigator.userAgent}`,
+    ].filter(l => l !== '').join('\n')
+
+    navigator.clipboard.writeText(lines).then(() => {
+        const btn = document.getElementById('copy-report-btn')!
+        const orig = btn.textContent!
+        btn.textContent = '✓ Copied to clipboard'
+        setTimeout(() => { btn.textContent = orig }, 2000)
+    })
+})
+
+document.getElementById('refresh-stats')!.addEventListener('click', pollStats)
+
 // ── Names ─────────────────────────────────────────────────────────────────────
 
 let myName   = 'You'
@@ -609,6 +826,7 @@ document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.add('active')
         document.getElementById(`tab-${target}`)!.classList.add('active')
         if (target === 'diagram') requestAnimationFrame(resizeCanvas)
+        if (target === 'network') pollStats()
     })
 })
 
@@ -678,8 +896,15 @@ function setupDataChannel(ch: RTCDataChannel) {
         sendBtn.disabled  = false
         sendData({ source: 'hello', name: myName })
         appendMessage('system', 'Connected to peer')
+        diagState.dcState = 'open'
+        updateDiagnosticsUI()
     }
-    ch.onclose   = () => setStatus('Peer disconnected', 'waiting')
+    ch.onclose = () => {
+        setStatus('Peer disconnected', 'waiting')
+        diagState.dcState = 'closed'
+        stopStatsPolling()
+        updateDiagnosticsUI()
+    }
     ch.onmessage = e => handleDataMessage(e.data)
 }
 
@@ -687,7 +912,25 @@ function createPeerConnection() {
     pc = new RTCPeerConnection(STUN_CONFIG)
 
     pc.onicecandidate = ({ candidate }) => {
-        if (candidate) ws.send(JSON.stringify({ type: 'candidate', candidate }))
+        if (candidate) {
+            ws.send(JSON.stringify({ type: 'candidate', candidate }))
+            diagState.localCandidates.push({ type: candidate.type ?? 'unknown', protocol: candidate.protocol ?? 'unknown' })
+            updateDiagnosticsUI()
+        }
+    }
+
+    pc.oniceconnectionstatechange = () => {
+        const s = pc!.iceConnectionState
+        diagState.iceState = s
+        if (s === 'checking' && !diagState.iceCheckingStart) diagState.iceCheckingStart = Date.now()
+        if (s !== 'checking') diagState.iceCheckingStart = 0
+        if (s === 'connected' || s === 'completed') startStatsPolling()
+        updateDiagnosticsUI()
+    }
+
+    pc.onicegatheringchange = () => {
+        diagState.gatheringState = pc!.iceGatheringState
+        updateDiagnosticsUI()
     }
 
     pc.ontrack = e => {
@@ -737,6 +980,8 @@ function resetPeerState() {
     pendingCandidates.length = 0
     msgInput.disabled = true
     sendBtn.disabled  = true
+    stopStatsPolling()
+    resetDiagState()
 }
 
 // ── WebSocket & signaling ─────────────────────────────────────────────────────
@@ -756,6 +1001,8 @@ function connect() {
         }, 25_000)
         ws.send(JSON.stringify({ type: 'join', room }))
         setStatus('Waiting for peer…', 'waiting')
+        diagState.wsConnected = true
+        updateDiagnosticsUI()
     }
 
     ws.onmessage = async ({ data }) => {
@@ -815,8 +1062,10 @@ function connect() {
 
     ws.onclose = () => {
         if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null }
+        diagState.wsConnected = false
         resetPeerState()
         setStatus('Reconnecting…', 'error')
+        updateDiagnosticsUI()
         setTimeout(() => {
             reconnectDelay = Math.min(reconnectDelay * 2, 16_000)
             connect()

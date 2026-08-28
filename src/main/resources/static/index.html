@@ -698,6 +698,128 @@
         }
         #join-btn:hover:not(:disabled) { opacity: .88; transform: scale(1.01); }
         #join-btn:disabled { opacity: .35; cursor: default; }
+
+        /* ── Diagnostics tab ── */
+        #tab-network {
+            overflow-y: auto;
+            padding: 14px;
+            gap: 10px;
+            flex-direction: column;
+        }
+        #tab-network::-webkit-scrollbar { width: 4px; }
+        #tab-network::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 2px; }
+
+        .diag-section {
+            background: var(--bg-1);
+            border: 1px solid var(--bg-3);
+            border-radius: 10px;
+            padding: 13px 15px;
+            flex-shrink: 0;
+        }
+        .diag-title {
+            font-size: 0.67rem;
+            font-weight: 700;
+            color: var(--text-2);
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            margin-bottom: 11px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .health-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 4px 0;
+        }
+        .health-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--text-2);
+            flex-shrink: 0;
+            transition: background .3s, box-shadow .3s;
+        }
+        .health-dot.ok    { background: var(--green);  box-shadow: 0 0 5px var(--green); }
+        .health-dot.warn  { background: var(--yellow); box-shadow: 0 0 5px var(--yellow); animation: pulse 1.4s infinite; }
+        .health-dot.error { background: var(--red);    box-shadow: 0 0 5px var(--red); }
+        .health-lbl { font-size: 0.78rem; color: var(--text-1); width: 130px; flex-shrink: 0; }
+        .health-val { font-size: 0.78rem; color: var(--text-0); font-weight: 600; }
+
+        .diag-box {
+            padding: 11px 13px;
+            border-radius: 7px;
+            font-size: 0.79rem;
+            line-height: 1.6;
+            border-left: 3px solid var(--bg-3);
+            background: var(--bg-2);
+            color: var(--text-0);
+            transition: border-color .3s;
+            white-space: pre-wrap;
+        }
+        .diag-box.ok    { border-color: var(--green);  }
+        .diag-box.warn  { border-color: var(--yellow); }
+        .diag-box.error { border-color: var(--red);    }
+
+        .cand-row {
+            display: grid;
+            grid-template-columns: 1fr 32px;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 0;
+            border-bottom: 1px solid var(--bg-3);
+        }
+        .cand-row:last-child { border-bottom: none; }
+        .cand-info { display: flex; flex-direction: column; gap: 1px; }
+        .cand-name { font-size: 0.78rem; font-weight: 700; color: var(--text-0); }
+        .cand-hint { font-size: 0.68rem; color: var(--text-2); }
+        .cand-count {
+            font-size: 1rem; font-weight: 800;
+            color: var(--accent); text-align: right;
+            transition: color .3s;
+        }
+        .cand-count.zero { color: var(--text-2); }
+        .cand-count.alarm { color: var(--red) !important; }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px solid var(--bg-3);
+            font-size: 0.78rem;
+        }
+        .stat-row:last-child { border-bottom: none; }
+        .stat-row span:first-child { color: var(--text-1); }
+        .stat-row .stat-val { color: var(--text-0); font-weight: 600; font-family: 'SF Mono', monospace; }
+
+        #refresh-stats {
+            margin-left: auto;
+            background: none;
+            border: 1px solid var(--bg-3);
+            border-radius: 5px;
+            color: var(--text-1);
+            cursor: pointer;
+            padding: 1px 8px;
+            font-size: 0.72rem;
+            transition: background var(--transition);
+        }
+        #refresh-stats:hover { background: var(--bg-3); }
+
+        #copy-report-btn {
+            width: 100%;
+            padding: 10px;
+            background: var(--bg-2);
+            border: 1px solid var(--bg-3);
+            border-radius: 8px;
+            color: var(--text-0);
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background var(--transition);
+        }
+        #copy-report-btn:hover { background: var(--bg-3); }
     </style>
 </head>
 <body>
@@ -774,6 +896,7 @@
         <div id="tabs">
             <button class="tab active" data-tab="code">💻 Code</button>
             <button class="tab" data-tab="diagram">✏️ Whiteboard</button>
+            <button class="tab" data-tab="network">🔬 Network</button>
         </div>
 
         <!-- Code tab -->
@@ -820,6 +943,81 @@
                 </div>
             </div>
             <canvas id="whiteboard"></canvas>
+        </div>
+
+        <!-- Network diagnostics tab -->
+        <div id="tab-network" class="tab-panel">
+
+            <!-- Health -->
+            <div class="diag-section">
+                <div class="diag-title">Connection Health</div>
+                <div class="health-row">
+                    <span class="health-dot" id="d-ws-dot"></span>
+                    <span class="health-lbl">Signaling server</span>
+                    <span class="health-val" id="d-ws-val">—</span>
+                </div>
+                <div class="health-row">
+                    <span class="health-dot" id="d-ice-dot"></span>
+                    <span class="health-lbl">P2P link</span>
+                    <span class="health-val" id="d-ice-val">—</span>
+                </div>
+                <div class="health-row">
+                    <span class="health-dot" id="d-dc-dot"></span>
+                    <span class="health-lbl">Data channel</span>
+                    <span class="health-val" id="d-dc-val">—</span>
+                </div>
+            </div>
+
+            <!-- Diagnosis -->
+            <div class="diag-section">
+                <div class="diag-title">Diagnosis</div>
+                <div class="diag-box" id="diag-box">Waiting for connection…</div>
+            </div>
+
+            <!-- ICE candidates -->
+            <div class="diag-section">
+                <div class="diag-title">ICE Candidates Gathered</div>
+                <div class="cand-row">
+                    <div class="cand-info">
+                        <span class="cand-name">Host  <span style="font-weight:400;color:var(--text-2)">(local IP)</span></span>
+                        <span class="cand-hint">Always present if WebRTC is not blocked by the browser</span>
+                    </div>
+                    <span class="cand-count zero" id="d-host-count">0</span>
+                </div>
+                <div class="cand-row">
+                    <div class="cand-info">
+                        <span class="cand-name">STUN  <span style="font-weight:400;color:var(--text-2)">(public IP via STUN)</span></span>
+                        <span class="cand-hint">If 0 → UDP to external servers is firewalled on this network</span>
+                    </div>
+                    <span class="cand-count zero" id="d-srflx-count">0</span>
+                </div>
+                <div class="cand-row">
+                    <div class="cand-info">
+                        <span class="cand-name">TURN  <span style="font-weight:400;color:var(--text-2)">(relay)</span></span>
+                        <span class="cand-hint">0 means no TURN server is configured — expected for now</span>
+                    </div>
+                    <span class="cand-count zero" id="d-relay-count">0</span>
+                </div>
+            </div>
+
+            <!-- Live stats -->
+            <div class="diag-section">
+                <div class="diag-title">
+                    Live Stats
+                    <button id="refresh-stats">↻ Refresh</button>
+                </div>
+                <div class="stat-row"><span>Round-trip time</span><span class="stat-val" id="d-rtt">—</span></div>
+                <div class="stat-row"><span>Active path</span><span class="stat-val" id="d-pair">—</span></div>
+                <div class="stat-row"><span>Bytes sent</span><span class="stat-val" id="d-sent">—</span></div>
+                <div class="stat-row"><span>Bytes received</span><span class="stat-val" id="d-recv">—</span></div>
+                <div class="stat-row"><span>ICE gathering</span><span class="stat-val" id="d-gathering">—</span></div>
+            </div>
+
+            <!-- Copy report -->
+            <div class="diag-section">
+                <button id="copy-report-btn">📋 Copy Diagnostic Report</button>
+            </div>
+
         </div>
     </div>
 </main>
