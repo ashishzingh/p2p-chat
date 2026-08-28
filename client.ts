@@ -45,8 +45,7 @@ int main() {
 
 // ── Room / URL ────────────────────────────────────────────────────────────────
 
-const room = location.hash.slice(1) || 'lobby'
-;(document.getElementById('room-name') as HTMLElement).textContent = room
+let room = ''   // set when the user enters a room (from home or hash)
 
 const proto = location.protocol === 'https:' ? 'wss' : 'ws'
 const wsUrl = `${proto}://${location.host}/signal`
@@ -87,6 +86,42 @@ const remoteLabel = document.getElementById('remote-label')!
 let myName   = 'You'
 let peerName = 'Peer'
 
+// ── Home screen ───────────────────────────────────────────────────────────────
+
+const homeScreen    = document.getElementById('home-screen')!
+const createRoomBtn = document.getElementById('create-room-btn') as HTMLButtonElement
+const joinCodeInput = document.getElementById('join-code-input') as HTMLInputElement
+const joinCodeBtn   = document.getElementById('join-code-btn') as HTMLButtonElement
+
+function generateRoomId(): string {
+    const adj  = ['swift','bold','calm','bright','deep','sharp','clean','brave','quick','cool']
+    const noun = ['eagle','tiger','river','falcon','storm','pine','coast','cliff','grove','peak']
+    const num  = Math.floor(Math.random() * 9000 + 1000)
+    const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]
+    return `${pick(adj)}-${pick(noun)}-${num}`
+}
+
+function showJoinScreen(roomId: string) {
+    room = roomId
+    location.hash = roomId
+    ;(document.getElementById('room-name') as HTMLElement).textContent = roomId
+    joinRoomDisplay.textContent = roomId
+    homeScreen.style.display = 'none'
+    joinScreen.classList.add('visible')
+    nameInput.focus()
+}
+
+createRoomBtn.addEventListener('click', () => showJoinScreen(generateRoomId()))
+
+joinCodeBtn.addEventListener('click', () => {
+    const code = joinCodeInput.value.trim().replace(/^#/, '')
+    if (code) showJoinScreen(code)
+})
+
+joinCodeInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && joinCodeInput.value.trim()) joinCodeBtn.click()
+})
+
 // ── Join screen ───────────────────────────────────────────────────────────────
 
 const joinScreen      = document.getElementById('join-screen')!
@@ -94,8 +129,6 @@ const joinRoomDisplay = document.getElementById('join-room-display')!
 const nameInput       = document.getElementById('name-input') as HTMLInputElement
 const joinBtn         = document.getElementById('join-btn') as HTMLButtonElement
 const copyLinkBtn     = document.getElementById('copy-link-btn') as HTMLButtonElement
-
-joinRoomDisplay.textContent = room
 
 nameInput.addEventListener('input', () => {
     joinBtn.disabled = nameInput.value.trim().length === 0
@@ -119,8 +152,20 @@ joinBtn.addEventListener('click', () => {
     myName = name
     localLabel.textContent = name
     joinScreen.classList.add('hiding')
-    setTimeout(() => { joinScreen.style.display = 'none' }, 260)
+    setTimeout(() => {
+        joinScreen.style.display = 'none'
+        connect()   // connect to signaling server only now
+    }, 260)
 })
+
+// ── Initial screen routing ────────────────────────────────────────────────────
+
+const initialHash = location.hash.slice(1).trim()
+if (initialHash) {
+    showJoinScreen(initialHash)   // direct link with room — skip home screen
+} else {
+    homeScreen.style.display = 'flex'   // no room yet — show home
+}
 
 // ── Theme toggle ──────────────────────────────────────────────────────────────
 
@@ -779,7 +824,7 @@ function connect() {
     }
 }
 
-connect()
+// connect() is called from the join button handler, not on page load
 
 // ── Chat send ─────────────────────────────────────────────────────────────────
 
