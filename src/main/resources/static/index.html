@@ -39,6 +39,63 @@
             --shadow: 0 4px 24px rgba(0,0,0,.08);
         }
 
+        /* ── Batman: Gotham noir, bat-gold accent ── */
+        body.batman {
+            --bg-0: #070709;
+            --bg-1: #0e0f14;
+            --bg-2: #181920;
+            --bg-3: #262830;
+            --text-0: #e8e4d8;
+            --text-1: #706e62;
+            --text-2: #39382f;
+            --accent: #f5c518;
+            --accent-b: #c8960c;
+            --green: #4a7a4a;
+            --red: #a33030;
+            --yellow: #f5c518;
+            --grad: linear-gradient(135deg, #2a1f00, #f5c518);
+            --shadow: 0 4px 32px rgba(0,0,0,.75);
+            background: radial-gradient(ellipse at 50% 0%, #14151e 0%, #070709 70%);
+        }
+
+        /* ── Superman: midnight navy, cape-blue → hero-red ── */
+        body.superman {
+            --bg-0: #050918;
+            --bg-1: #0b1228;
+            --bg-2: #131c3e;
+            --bg-3: #1e2b56;
+            --text-0: #e8eef8;
+            --text-1: #6070a0;
+            --text-2: #354068;
+            --accent: #e53935;
+            --accent-b: #ffd600;
+            --green: #2a8a32;
+            --red: #e53935;
+            --yellow: #ffd600;
+            --grad: linear-gradient(135deg, #1565c0, #e53935);
+            --shadow: 0 4px 24px rgba(0,0,0,.55);
+            background: radial-gradient(ellipse at 30% 0%, #0f1e42 0%, #050918 70%);
+        }
+
+        /* ── Spiderman: NYC purple-night, vivid red → electric blue ── */
+        body.spiderman {
+            --bg-0: #0d0a1a;
+            --bg-1: #14102a;
+            --bg-2: #1e1838;
+            --bg-3: #2c2252;
+            --text-0: #f0eeff;
+            --text-1: #8b7ebc;
+            --text-2: #463876;
+            --accent: #e8001c;
+            --accent-b: #448aff;
+            --green: #00c853;
+            --red: #e8001c;
+            --yellow: #ffea00;
+            --grad: linear-gradient(135deg, #e8001c, #448aff);
+            --shadow: 0 4px 24px rgba(0,0,0,.5);
+            background: radial-gradient(ellipse at 50% 20%, #1e1438 0%, #0d0a1a 70%);
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
@@ -152,6 +209,70 @@
             animation: pulse 1.5s infinite;
         }
         .notif-dot.show { display: block; }
+
+        /* ── Theme picker ── */
+        #theme-picker {
+            position: relative;
+        }
+        #theme-picker-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            width: auto;
+            padding: 0 9px;
+            font-size: .8rem;
+        }
+        #theme-picker-btn .chevron {
+            font-size: .55rem;
+            opacity: .5;
+            transition: transform var(--transition);
+        }
+        #theme-picker.open #theme-picker-btn .chevron { transform: rotate(180deg); }
+
+        #theme-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            background: var(--bg-1);
+            border: 1px solid var(--bg-3);
+            border-radius: 11px;
+            padding: 5px;
+            display: none;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 160px;
+            box-shadow: var(--shadow), 0 0 0 1px rgba(255,255,255,.04);
+            z-index: 300;
+            animation: menuDrop .15s ease;
+        }
+        @keyframes menuDrop { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+        #theme-picker.open #theme-menu { display: flex; }
+
+        .theme-option {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 7px 10px;
+            border: none;
+            border-radius: 7px;
+            background: transparent;
+            color: var(--text-0);
+            font-size: .8rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: left;
+            width: 100%;
+            transition: background var(--transition);
+        }
+        .theme-option:hover { background: var(--bg-2); }
+        .theme-option.active { background: var(--bg-2); }
+        .theme-option .tdot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .theme-option .tlabel { flex: 1; }
+        .theme-option .tcheck { font-size: .7rem; opacity: .6; }
 
         /* ── Workspace ── */
         #workspace {
@@ -657,7 +778,26 @@
         <button id="chat-toggle-btn" class="hbtn" title="Chat">
             💬<span class="notif-dot" id="chat-notif"></span>
         </button>
-        <button id="theme-toggle" class="hbtn" title="Toggle theme">🌙</button>
+        <div id="theme-picker">
+            <button id="theme-picker-btn" class="hbtn" title="Theme">
+                <span id="theme-icon">🌙</span>
+                <span class="chevron">▼</span>
+            </button>
+            <div id="theme-menu">
+                <button class="theme-option" data-theme="batman">
+                    <span class="tdot" style="background:#f5c518"></span>
+                    <span class="tlabel">🦇 Batman</span>
+                </button>
+                <button class="theme-option" data-theme="superman">
+                    <span class="tdot" style="background:#e53935"></span>
+                    <span class="tlabel">🦸 Superman</span>
+                </button>
+                <button class="theme-option" data-theme="spiderman">
+                    <span class="tdot" style="background:#e8001c"></span>
+                    <span class="tlabel">🕷️ Spiderman</span>
+                </button>
+            </div>
+        </div>
     </div>
 </header>
 

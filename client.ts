@@ -386,19 +386,58 @@ if (initialHash) {
     homeScreen.style.display = 'flex'   // no room yet — show home
 }
 
-// ── Theme toggle ──────────────────────────────────────────────────────────────
+// ── Theme picker ──────────────────────────────────────────────────────────────
 
-const themeBtn = document.getElementById('theme-toggle') as HTMLButtonElement
-const savedTheme = localStorage.getItem('theme') || 'dark'
-if (savedTheme === 'light') document.body.classList.add('light')
-themeBtn.textContent = savedTheme === 'light' ? '🌙' : '☀️'
+const THEMES = {
+    batman:    { icon: '🦇', cls: 'batman' },
+    superman:  { icon: '🦸', cls: 'superman' },
+    spiderman: { icon: '🕷️', cls: 'spiderman' },
+} as const
+type ThemeName = keyof typeof THEMES
+const THEME_CLASSES = ['light', 'batman', 'superman', 'spiderman']
 
-themeBtn.addEventListener('click', () => {
-    document.body.classList.toggle('light')
-    const isLight = document.body.classList.contains('light')
-    localStorage.setItem('theme', isLight ? 'light' : 'dark')
-    themeBtn.textContent = isLight ? '🌙' : '☀️'
+const themePickerEl = document.getElementById('theme-picker')!
+const themeIconEl   = document.getElementById('theme-icon')!
+
+function applyTheme(name: ThemeName) {
+    document.body.classList.remove(...THEME_CLASSES)
+    const cls = THEMES[name].cls
+    if (cls) document.body.classList.add(cls)
+    themeIconEl.textContent = THEMES[name].icon
+    document.querySelectorAll('.theme-option').forEach(el => {
+        const opt = el as HTMLElement
+        const isActive = opt.dataset.theme === name
+        opt.classList.toggle('active', isActive)
+        let check = opt.querySelector('.tcheck') as HTMLElement | null
+        if (isActive && !check) {
+            check = document.createElement('span')
+            check.className = 'tcheck'
+            check.textContent = '✓'
+            opt.appendChild(check)
+        } else if (!isActive && check) {
+            check.remove()
+        }
+    })
+    localStorage.setItem('theme', name)
+}
+
+const saved = localStorage.getItem('theme') as ThemeName
+applyTheme(saved in THEMES ? saved : 'batman')
+
+document.getElementById('theme-picker-btn')!.addEventListener('click', e => {
+    themePickerEl.classList.toggle('open')
+    e.stopPropagation()
 })
+
+document.querySelectorAll('.theme-option').forEach(btn => {
+    btn.addEventListener('click', e => {
+        applyTheme((btn as HTMLElement).dataset.theme as ThemeName)
+        themePickerEl.classList.remove('open')
+        e.stopPropagation()
+    })
+})
+
+document.addEventListener('click', () => themePickerEl.classList.remove('open'))
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 
