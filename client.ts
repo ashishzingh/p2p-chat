@@ -208,62 +208,100 @@ function showOutput(text: string, isError = false, isInfo = false) {
     outputBadge.className   = `badge ${isError ? 'err' : isInfo ? 'info' : 'ok'}`
 }
 
+// Piston public API — free, open-source, no account, no billing
+// Docs: https://github.com/engineer-man/piston
+const PISTON_URL = 'https://emkc.org/api/v2/piston/execute'
+const PISTON_LANG: Record<string, string> = {
+    java: 'java',
+    c:    'c',
+    cpp:  'c++',
+}
+
 clearOutputBtn.addEventListener('click', () => {
-    outputText.textContent  = '// Click ▶ Run to execute JavaScript'
+    outputText.textContent  = '// Click ▶ Run to execute'
     outputBadge.textContent = 'ready'
     outputBadge.className   = 'badge info'
 })
 
-runBtn.addEventListener('click', () => {
+runBtn.addEventListener('click', async () => {
     const code = editor.state.doc.toString()
-
-    if (currentLang !== 'js') {
-        const msg = `⚠️ Browser execution only supports JavaScript.\n\nFor ${currentLang.toUpperCase()}, use:\n• replit.com\n• godbolt.org\n• onlinegdb.com`
-        showOutput(msg, false, true)
-        sendData({ source: 'code-output', output: msg })
-        return
-    }
-
     runBtn.classList.add('running')
     runBtn.textContent = '⏳ Running…'
+    runBtn.disabled = true
 
-    const captured: string[] = []
-    const origLog   = console.log
-    const origError = console.error
-    const origWarn  = console.warn
+    if (currentLang === 'js') {
+        // Run JavaScript locally — no network call
+        const captured: string[] = []
+        const origLog   = console.log
+        const origError = console.error
+        const origWarn  = console.warn
 
-    const capture = (prefix: string) => (...args: unknown[]) => {
-        captured.push(prefix + args.map(a =>
-            a === null       ? 'null' :
-            a === undefined  ? 'undefined' :
-            typeof a === 'object' ? JSON.stringify(a, null, 2) :
-            String(a)
-        ).join(' '))
+        const capture = (prefix: string) => (...args: unknown[]) => {
+            captured.push(prefix + args.map(a =>
+                a === null       ? 'null' :
+                a === undefined  ? 'undefined' :
+                typeof a === 'object' ? JSON.stringify(a, null, 2) :
+                String(a)
+            ).join(' '))
+        }
+
+        console.log   = capture('')
+        console.error = capture('ERROR: ')
+        console.warn  = capture('WARN:  ')
+
+        let isError = false
+        try {
+            // eslint-disable-next-line no-new-func
+            new Function(code)()
+        } catch (e: unknown) {
+            captured.push(`Runtime Error: ${e instanceof Error ? e.message : String(e)}`)
+            isError = true
+        } finally {
+            console.log   = origLog
+            console.error = origError
+            console.warn  = origWarn
+        }
+
+        const output = captured.length > 0 ? captured.join('\n') : '(no output)'
+        showOutput(output, isError)
+        sendData({ source: 'code-output', output })
+    } else {
+        // Run Java / C / C++ via Piston (free public API, no auth, no charges)
+        try {
+            const resp = await fetch(PISTON_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    language: PISTON_LANG[currentLang],
+                    version: '*',
+                    files: [{ content: code }],
+                }),
+            })
+
+            if (!resp.ok) throw new Error(`Piston returned ${resp.status}`)
+
+            const data = await resp.json()
+            const stdout = (data.run?.stdout ?? '').trimEnd()
+            const stderr = (data.run?.stderr ?? '').trimEnd()
+            const exitCode: number = data.run?.code ?? 0
+
+            let output = ''
+            if (stdout) output += stdout
+            if (stderr) output += (output ? '\n' : '') + `STDERR:\n${stderr}`
+            if (!output) output = exitCode === 0 ? '(no output)' : `Exited with code ${exitCode}`
+
+            showOutput(output, exitCode !== 0 || !!stderr)
+            sendData({ source: 'code-output', output })
+        } catch (e: unknown) {
+            const msg = `Could not reach Piston executor.\n${e instanceof Error ? e.message : String(e)}`
+            showOutput(msg, true)
+            sendData({ source: 'code-output', output: msg })
+        }
     }
-
-    console.log   = capture('')
-    console.error = capture('ERROR: ')
-    console.warn  = capture('WARN:  ')
-
-    let isError = false
-    try {
-        // eslint-disable-next-line no-new-func
-        new Function(code)()
-    } catch (e: unknown) {
-        captured.push(`\nRuntime Error: ${e instanceof Error ? e.message : String(e)}`)
-        isError = true
-    } finally {
-        console.log   = origLog
-        console.error = origError
-        console.warn  = origWarn
-    }
-
-    const output = captured.length > 0 ? captured.join('\n') : '(no output)'
-    showOutput(output, isError)
-    sendData({ source: 'code-output', output })
 
     runBtn.classList.remove('running')
     runBtn.textContent = '▶ Run'
+    runBtn.disabled = false
 })
 
 // ── Whiteboard ────────────────────────────────────────────────────────────────
