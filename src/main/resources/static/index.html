@@ -294,6 +294,29 @@
         .legend.you   { color: #a78bfa; }
         .legend.peer  { color: #38bdf8; }
 
+        .swatch {
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            padding: 0;
+            flex-shrink: 0;
+            transition: border-color .15s, transform .1s;
+        }
+        .swatch:hover  { transform: scale(1.15); }
+        .swatch.active { border-color: #fff; transform: scale(1.15); }
+
+        #custom-color {
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            border: 2px solid #30363d;
+            cursor: pointer;
+            padding: 0;
+            background: none;
+            flex-shrink: 0;
+        }
+        #color-swatches { display: flex; align-items: center; gap: 5px; }
+
         .tool-btn {
             padding: 3px 12px;
             background: #21262d;
@@ -377,12 +400,21 @@
         <!-- Whiteboard tab -->
         <div id="tab-diagram" class="tab-panel">
             <div id="diagram-toolbar">
-                <span class="legend you">● You</span>
-                <span class="legend peer">● Peer</span>
                 <div id="diagram-tools">
                     <button class="tool-btn active" id="tool-pen">✏ Pen</button>
                     <button class="tool-btn" id="tool-eraser">◻ Eraser</button>
                 </div>
+                <div id="color-swatches">
+                    <button class="swatch active" data-color="#a78bfa" style="background:#a78bfa" title="Purple"></button>
+                    <button class="swatch" data-color="#38bdf8" style="background:#38bdf8" title="Blue"></button>
+                    <button class="swatch" data-color="#3fb950" style="background:#3fb950" title="Green"></button>
+                    <button class="swatch" data-color="#f85149" style="background:#f85149" title="Red"></button>
+                    <button class="swatch" data-color="#d29922" style="background:#d29922" title="Yellow"></button>
+                    <button class="swatch" data-color="#e6edf3" style="background:#e6edf3" title="White"></button>
+                    <input type="color" id="custom-color" value="#a78bfa" title="Custom colour">
+                </div>
+                <span class="legend you" style="margin-left:auto">● You</span>
+                <span class="legend peer">● Peer</span>
                 <button class="tool-btn" id="clear-canvas">Clear All</button>
             </div>
             <canvas id="whiteboard"></canvas>

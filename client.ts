@@ -383,21 +383,21 @@ const ctx2d  = canvas.getContext('2d')!
 let drawing  = false
 let lx = 0, ly = 0
 let erasing  = false
+let myDrawColor = '#a78bfa'
 
 function resizeCanvas() {
     const rect = canvas.getBoundingClientRect()
-    const dpr  = devicePixelRatio || 1
-    // Save image before resize
-    const img  = ctx2d.getImageData(0, 0, canvas.width, canvas.height)
-    canvas.width  = rect.width  * dpr
-    canvas.height = rect.height * dpr
-    ctx2d.scale(dpr, dpr)
-    ctx2d.putImageData(img, 0, 0)
+    if (rect.width === 0 || rect.height === 0) return  // tab hidden — skip
+    // Save drawing, resize, restore
+    const tmp = document.createElement('canvas')
+    tmp.width = canvas.width; tmp.height = canvas.height
+    tmp.getContext('2d')!.drawImage(canvas, 0, 0)
+    canvas.width  = Math.floor(rect.width)
+    canvas.height = Math.floor(rect.height)
+    ctx2d.drawImage(tmp, 0, 0)
 }
 
 window.addEventListener('resize', resizeCanvas)
-// Initial size set after layout renders
-setTimeout(resizeCanvas, 50)
 
 function stroke(x1: number, y1: number, x2: number, y2: number, color: string, width = 2.5) {
     ctx2d.beginPath()
@@ -436,7 +436,7 @@ canvas.addEventListener('mousemove', e => {
     if (erasing) {
         erase(lx, ly, x, y)
     } else {
-        stroke(lx, ly, x, y, MY_COLOR)
+        stroke(lx, ly, x, y, myDrawColor)
     }
     sendData({ source: 'diagram', op: 'line', x1: lx, y1: ly, x2: x, y2: y })
     lx = x; ly = y
@@ -457,7 +457,7 @@ canvas.addEventListener('touchmove', e => {
     e.preventDefault()
     if (!drawing) return
     const { x, y } = getCanvasPos(e.touches[0])
-    if (erasing) { erase(lx, ly, x, y) } else { stroke(lx, ly, x, y, MY_COLOR) }
+    if (erasing) { erase(lx, ly, x, y) } else { stroke(lx, ly, x, y, myDrawColor) }
     sendData({ source: 'diagram', op: 'line', x1: lx, y1: ly, x2: x, y2: y })
     lx = x; ly = y
 }, { passive: false })
@@ -489,6 +489,25 @@ document.getElementById('clear-canvas')!.addEventListener('click', () => {
     sendData({ source: 'diagram', op: 'clear' })
 })
 
+// Color swatches
+document.querySelectorAll<HTMLElement>('.swatch').forEach(s => {
+    s.addEventListener('click', () => {
+        myDrawColor = s.dataset.color!
+        erasing = false
+        canvas.style.cursor = 'crosshair'
+        document.querySelectorAll('.swatch').forEach(b => b.classList.remove('active'))
+        s.classList.add('active')
+        document.getElementById('tool-pen')!.classList.add('active')
+        document.getElementById('tool-eraser')!.classList.remove('active')
+    })
+})
+
+const customColorInput = document.getElementById('custom-color') as HTMLInputElement
+customColorInput.addEventListener('input', () => {
+    myDrawColor = customColorInput.value
+    document.querySelectorAll('.swatch').forEach(b => b.classList.remove('active'))
+})
+
 // ── Tab switching ─────────────────────────────────────────────────────────────
 
 document.querySelectorAll<HTMLElement>('.tab').forEach(tab => {
@@ -498,7 +517,6 @@ document.querySelectorAll<HTMLElement>('.tab').forEach(tab => {
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'))
         tab.classList.add('active')
         document.getElementById(`tab-${target}`)!.classList.add('active')
-        // Resize canvas when whiteboard tab becomes visible
-        if (target === 'diagram') setTimeout(resizeCanvas, 10)
+        if (target === 'diagram') requestAnimationFrame(resizeCanvas)
     })
 })
