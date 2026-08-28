@@ -476,9 +476,149 @@
             touch-action: none;
             background: var(--bg-0);
         }
+
+        /* ── Join screen ── */
+        #join-screen {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-0);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            transition: opacity .25s ease;
+        }
+        #join-screen.hiding {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #join-card {
+            background: var(--bg-1);
+            border: 1px solid var(--bg-3);
+            border-radius: 18px;
+            padding: 40px 36px;
+            width: 380px;
+            box-shadow: var(--shadow);
+            animation: slideUp .3s ease;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(18px); opacity: 0; }
+            to   { transform: translateY(0);    opacity: 1; }
+        }
+
+        #join-card h2 {
+            font-size: 1.3rem;
+            font-weight: 800;
+            background: var(--grad);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 6px;
+        }
+
+        #join-subtitle {
+            font-size: 0.8rem;
+            color: var(--text-1);
+            margin-bottom: 28px;
+        }
+
+        #join-room-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-2);
+            border: 1px solid var(--bg-3);
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin-bottom: 20px;
+        }
+        #join-room-row .label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--text-2);
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            flex-shrink: 0;
+        }
+        #join-room-display {
+            flex: 1;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--accent);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #copy-link-btn {
+            background: none;
+            border: none;
+            color: var(--text-1);
+            cursor: pointer;
+            font-size: .8rem;
+            padding: 2px 6px;
+            border-radius: 5px;
+            transition: color var(--transition), background var(--transition);
+            flex-shrink: 0;
+        }
+        #copy-link-btn:hover { color: var(--text-0); background: var(--bg-3); }
+
+        #join-name-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-1);
+            margin-bottom: 7px;
+            display: block;
+        }
+        #name-input {
+            width: 100%;
+            padding: 11px 14px;
+            background: var(--bg-0);
+            border: 1.5px solid var(--bg-3);
+            border-radius: 9px;
+            color: var(--text-0);
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color var(--transition);
+        }
+        #name-input::placeholder { color: var(--text-2); }
+        #name-input:focus { border-color: var(--accent); }
+
+        #join-btn {
+            width: 100%;
+            margin-top: 14px;
+            padding: 12px;
+            background: var(--grad);
+            border: none;
+            border-radius: 9px;
+            color: #fff;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity var(--transition), transform .1s;
+        }
+        #join-btn:hover:not(:disabled) { opacity: .88; transform: scale(1.01); }
+        #join-btn:disabled { opacity: .35; cursor: default; }
     </style>
 </head>
 <body>
+
+<!-- Join screen — shown before entering the room -->
+<div id="join-screen">
+    <div id="join-card">
+        <h2>⚡ Interview Room</h2>
+        <p id="join-subtitle">Set your name before joining</p>
+
+        <div id="join-room-row">
+            <span class="label">Room</span>
+            <span id="join-room-display"></span>
+            <button id="copy-link-btn" title="Copy invite link">📋 Copy link</button>
+        </div>
+
+        <label id="join-name-label" for="name-input">Your name</label>
+        <input id="name-input" type="text" placeholder="e.g. Ashish" maxlength="30" autocomplete="off" />
+        <button id="join-btn" disabled>Join Room →</button>
+    </div>
+</div>
 
 <header>
     <h2>⚡ Interview Room</h2>
@@ -496,11 +636,11 @@
             <div id="video-row">
                 <div class="video-wrap">
                     <video id="local-video" autoplay muted playsinline></video>
-                    <div class="video-label">You</div>
+                    <div class="video-label" id="local-label">You</div>
                 </div>
                 <div class="video-wrap">
                     <video id="remote-video" autoplay playsinline></video>
-                    <div class="video-label">Peer</div>
+                    <div class="video-label" id="remote-label">Peer</div>
                 </div>
             </div>
             <button id="toggle-video">🎥 Start Video</button>

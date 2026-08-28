@@ -62,6 +62,7 @@ interface Stroke {
 }
 
 type DataMsg =
+    | { source: 'hello'; name: string }
     | { source: 'chat'; text: string }
     | { source: 'code'; content: string; lang: string }
     | { source: 'code-output'; output: string }
@@ -78,6 +79,48 @@ const statusText = document.getElementById('status-text')!
 const messages   = document.getElementById('messages')!
 const msgInput   = document.getElementById('msg') as HTMLInputElement
 const sendBtn    = document.getElementById('send') as HTMLButtonElement
+const localLabel  = document.getElementById('local-label')!
+const remoteLabel = document.getElementById('remote-label')!
+
+// ── Names ─────────────────────────────────────────────────────────────────────
+
+let myName   = 'You'
+let peerName = 'Peer'
+
+// ── Join screen ───────────────────────────────────────────────────────────────
+
+const joinScreen      = document.getElementById('join-screen')!
+const joinRoomDisplay = document.getElementById('join-room-display')!
+const nameInput       = document.getElementById('name-input') as HTMLInputElement
+const joinBtn         = document.getElementById('join-btn') as HTMLButtonElement
+const copyLinkBtn     = document.getElementById('copy-link-btn') as HTMLButtonElement
+
+joinRoomDisplay.textContent = room
+
+nameInput.addEventListener('input', () => {
+    joinBtn.disabled = nameInput.value.trim().length === 0
+})
+
+nameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !joinBtn.disabled) joinBtn.click()
+})
+
+copyLinkBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(location.href).then(() => {
+        const orig = copyLinkBtn.textContent!
+        copyLinkBtn.textContent = '✓ Copied!'
+        setTimeout(() => { copyLinkBtn.textContent = orig }, 2000)
+    })
+})
+
+joinBtn.addEventListener('click', () => {
+    const name = nameInput.value.trim()
+    if (!name) return
+    myName = name
+    localLabel.textContent = name
+    joinScreen.classList.add('hiding')
+    setTimeout(() => { joinScreen.style.display = 'none' }, 260)
+})
 
 // ── Theme toggle ──────────────────────────────────────────────────────────────
 
@@ -113,7 +156,7 @@ function appendMessage(who: 'you' | 'peer' | 'system', text: string) {
         el.className = `bubble ${who}`
         const nameEl = document.createElement('div')
         nameEl.className = 'who'
-        nameEl.textContent = who === 'you' ? 'You' : 'Peer'
+        nameEl.textContent = who === 'you' ? myName : peerName
         el.appendChild(nameEl)
         el.appendChild(document.createTextNode(text))
         messages.appendChild(el)
@@ -571,6 +614,11 @@ function sendData(msg: DataMsg) {
 
 function handleDataMessage(raw: string) {
     const msg: DataMsg = JSON.parse(raw)
+    if (msg.source === 'hello') {
+        peerName = msg.name
+        remoteLabel.textContent = msg.name
+        return
+    }
     if (msg.source === 'chat')        return appendMessage('peer', msg.text)
     if (msg.source === 'code')        return applyRemoteCode(msg.content, msg.lang)
     if (msg.source === 'code-output') return showOutput(msg.output, msg.output.startsWith('ERROR'), msg.output.startsWith('⚠️'))
@@ -583,6 +631,7 @@ function setupDataChannel(ch: RTCDataChannel) {
         setStatus('Connected', 'connected')
         msgInput.disabled = false
         sendBtn.disabled  = false
+        sendData({ source: 'hello', name: myName })
         appendMessage('system', 'Connected to peer')
     }
     ch.onclose   = () => setStatus('Peer disconnected', 'waiting')
