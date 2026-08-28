@@ -368,6 +368,8 @@ joinBtn.addEventListener('click', () => {
     if (!name) return
     myName = name
     localLabel.textContent = name
+    const la = document.getElementById('local-avatar')
+    if (la) la.textContent = name[0].toUpperCase()
     joinScreen.classList.add('hiding')
     setTimeout(() => {
         joinScreen.style.display = 'none'
@@ -424,6 +426,11 @@ function appendMessage(who: 'you' | 'peer' | 'system', text: string) {
         messages.appendChild(el)
     }
     messages.scrollTop = messages.scrollHeight
+    if (who === 'peer') {
+        const drawer = document.getElementById('chat-drawer')
+        if (drawer && !drawer.classList.contains('open'))
+            document.getElementById('chat-notif')?.classList.add('show')
+    }
 }
 
 function playPing() {
@@ -846,8 +853,9 @@ toggleBtn.addEventListener('click', async () => {
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
             localVideo.srcObject = localStream
-            toggleBtn.textContent = '🎥 Stop Video'
+            toggleBtn.textContent = '📹'
             toggleBtn.classList.add('active')
+            document.getElementById('pip-local')!.classList.add('cam-on')
             if (pc && pc.connectionState !== 'closed') {
                 localStream.getTracks().forEach(t => pc!.addTrack(t, localStream!))
             }
@@ -856,7 +864,8 @@ toggleBtn.addEventListener('click', async () => {
         localStream.getTracks().forEach(t => t.stop())
         localStream = null
         localVideo.srcObject = null
-        toggleBtn.textContent = '🎥 Start Video'
+        document.getElementById('pip-local')!.classList.remove('cam-on')
+        toggleBtn.textContent = '📷'
         toggleBtn.classList.remove('active')
     }
 })
@@ -880,6 +889,8 @@ function handleDataMessage(raw: string) {
     if (msg.source === 'hello') {
         peerName = msg.name
         remoteLabel.textContent = msg.name
+        const ra = document.getElementById('remote-avatar')
+        if (ra) ra.textContent = msg.name[0].toUpperCase()
         return
     }
     if (msg.source === 'chat')        return appendMessage('peer', msg.text)
@@ -936,6 +947,7 @@ function createPeerConnection() {
     pc.ontrack = e => {
         if (!remoteVideo.srcObject) remoteVideo.srcObject = new MediaStream()
         ;(remoteVideo.srcObject as MediaStream).addTrack(e.track)
+        document.getElementById('pip-remote')!.classList.add('cam-on')
     }
 
     pc.ondatachannel = e => setupDataChannel(e.channel)
@@ -980,6 +992,8 @@ function resetPeerState() {
     pendingCandidates.length = 0
     msgInput.disabled = true
     sendBtn.disabled  = true
+    remoteVideo.srcObject = null
+    document.getElementById('pip-remote')!.classList.remove('cam-on')
     stopStatsPolling()
     resetDiagState()
 }
@@ -1087,3 +1101,76 @@ function sendChatMessage() {
 
 sendBtn.addEventListener('click', sendChatMessage)
 msgInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendChatMessage() })
+
+// ── Chat drawer ───────────────────────────────────────────────────────────────
+
+const chatDrawer   = document.getElementById('chat-drawer')!
+const chatBackdrop = document.getElementById('chat-backdrop')!
+
+function openChatDrawer() {
+    chatDrawer.classList.add('open')
+    chatBackdrop.classList.add('visible')
+    document.getElementById('chat-notif')?.classList.remove('show')
+    messages.scrollTop = messages.scrollHeight
+}
+function closeChatDrawer() {
+    chatDrawer.classList.remove('open')
+    chatBackdrop.classList.remove('visible')
+}
+
+document.getElementById('chat-toggle-btn')!.addEventListener('click', () => {
+    chatDrawer.classList.contains('open') ? closeChatDrawer() : openChatDrawer()
+})
+document.getElementById('close-chat-btn')!.addEventListener('click', closeChatDrawer)
+chatBackdrop.addEventListener('click', closeChatDrawer)
+
+// ── PIP drag & collapse ───────────────────────────────────────────────────────
+
+const pipContainer   = document.getElementById('pip-container')!
+const pipHandle      = document.getElementById('pip-handle')!
+const pipCollapseBtn = document.getElementById('pip-collapse-btn')!
+
+let pipDragging = false
+let pipDragStartX = 0, pipDragStartY = 0, pipStartLeft = 0, pipStartTop = 0
+
+function pipPointerStart(clientX: number, clientY: number) {
+    pipDragging = true
+    pipDragStartX = clientX
+    pipDragStartY = clientY
+    const rect = pipContainer.getBoundingClientRect()
+    pipStartLeft = rect.left
+    pipStartTop  = rect.top
+    pipContainer.style.right  = 'auto'
+    pipContainer.style.bottom = 'auto'
+    pipContainer.style.left   = `${pipStartLeft}px`
+    pipContainer.style.top    = `${pipStartTop}px`
+}
+
+function pipPointerMove(clientX: number, clientY: number) {
+    if (!pipDragging) return
+    pipContainer.style.left = `${Math.max(0, pipStartLeft + clientX - pipDragStartX)}px`
+    pipContainer.style.top  = `${Math.max(0, pipStartTop  + clientY - pipDragStartY)}px`
+}
+
+pipHandle.addEventListener('mousedown', e => {
+    if ((e.target as HTMLElement).closest('#pip-collapse-btn')) return
+    pipPointerStart(e.clientX, e.clientY)
+    e.preventDefault()
+})
+document.addEventListener('mousemove', e => pipPointerMove(e.clientX, e.clientY))
+document.addEventListener('mouseup',   () => { pipDragging = false })
+
+pipHandle.addEventListener('touchstart', e => {
+    if ((e.target as HTMLElement).closest('#pip-collapse-btn')) return
+    pipPointerStart(e.touches[0].clientX, e.touches[0].clientY)
+    e.preventDefault()
+}, { passive: false })
+document.addEventListener('touchmove', e => {
+    if (pipDragging) pipPointerMove(e.touches[0].clientX, e.touches[0].clientY)
+}, { passive: true })
+document.addEventListener('touchend', () => { pipDragging = false })
+
+pipCollapseBtn.addEventListener('click', () => {
+    const collapsed = pipContainer.classList.toggle('collapsed')
+    pipCollapseBtn.textContent = collapsed ? '+' : '−'
+})
