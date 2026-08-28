@@ -208,13 +208,52 @@ function showOutput(text: string, isError = false, isInfo = false) {
     outputBadge.className   = `badge ${isError ? 'err' : isInfo ? 'info' : 'ok'}`
 }
 
-// Piston public API — free, open-source, no account, no billing
-// Docs: https://github.com/engineer-man/piston
-const PISTON_URL = 'https://emkc.org/api/v2/piston/execute'
-const PISTON_LANG: Record<string, string> = {
-    java: 'java',
-    c:    'c',
-    cpp:  'c++',
+// Wandbox — free community compiler service, no account, no billing, no rate limit key
+// https://github.com/melpon/wandbox  |  running since 2012
+const WANDBOX_URL = 'https://wandbox.org/api/compile.json'
+
+async function runWithWandbox(code: string, lang: string): Promise<{ output: string; isError: boolean }> {
+    // For Java, the compiler needs the filename to match the public class name
+    let compiler: string
+    let compilerOptionRaw: string | undefined
+
+    if (lang === 'java') {
+        compiler = 'openjdk-head'
+    } else if (lang === 'c') {
+        compiler = 'gcc-head'
+        compilerOptionRaw = '-x c'
+    } else {
+        compiler = 'gcc-head'
+    }
+
+    // Extract class name so Wandbox can name the Java file correctly
+    const javaFilename = lang === 'java'
+        ? (() => { const m = code.match(/(?:public\s+)?class\s+(\w+)/); return m ? `${m[1]}.java` : 'Main.java' })()
+        : undefined
+
+    const body: Record<string, string> = { compiler, code }
+    if (compilerOptionRaw) body['compiler-option-raw'] = compilerOptionRaw
+    if (javaFilename)      body['filename'] = javaFilename
+
+    const resp = await fetch(WANDBOX_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    })
+    if (!resp.ok) throw new Error(`Wandbox returned ${resp.status}`)
+
+    const data = await resp.json()
+    const progOut  = (data.program_output  ?? '').trimEnd()
+    const progErr  = (data.program_error   ?? '').trimEnd()
+    const compErr  = (data.compiler_error  ?? '').trimEnd()
+
+    let output = ''
+    if (progOut) output += progOut
+    if (progErr) output += (output ? '\n' : '') + `STDERR:\n${progErr}`
+    if (compErr) output += (output ? '\n' : '') + `Compile error:\n${compErr}`
+    if (!output) output = data.status === '0' ? '(no output)' : `Exited with status ${data.status}`
+
+    return { output, isError: data.status !== '0' || !!compErr }
 }
 
 clearOutputBtn.addEventListener('click', () => {
@@ -266,34 +305,13 @@ runBtn.addEventListener('click', async () => {
         showOutput(output, isError)
         sendData({ source: 'code-output', output })
     } else {
-        // Run Java / C / C++ via Piston (free public API, no auth, no charges)
+        // Run Java / C / C++ via Wandbox (free, no auth, no charges ever)
         try {
-            const resp = await fetch(PISTON_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    language: PISTON_LANG[currentLang],
-                    version: '*',
-                    files: [{ content: code }],
-                }),
-            })
-
-            if (!resp.ok) throw new Error(`Piston returned ${resp.status}`)
-
-            const data = await resp.json()
-            const stdout = (data.run?.stdout ?? '').trimEnd()
-            const stderr = (data.run?.stderr ?? '').trimEnd()
-            const exitCode: number = data.run?.code ?? 0
-
-            let output = ''
-            if (stdout) output += stdout
-            if (stderr) output += (output ? '\n' : '') + `STDERR:\n${stderr}`
-            if (!output) output = exitCode === 0 ? '(no output)' : `Exited with code ${exitCode}`
-
-            showOutput(output, exitCode !== 0 || !!stderr)
+            const { output, isError } = await runWithWandbox(code, currentLang)
+            showOutput(output, isError)
             sendData({ source: 'code-output', output })
         } catch (e: unknown) {
-            const msg = `Could not reach Piston executor.\n${e instanceof Error ? e.message : String(e)}`
+            const msg = `Could not reach Wandbox.\n${e instanceof Error ? e.message : String(e)}`
             showOutput(msg, true)
             sendData({ source: 'code-output', output: msg })
         }

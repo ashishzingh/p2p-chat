@@ -19338,56 +19338,60 @@ const Mt = document.getElementById("run-btn"), ou = document.getElementById("out
 function fs(n, e = !1, t = !1) {
   ou.textContent = n, Es.textContent = e ? "error" : t ? "info" : "ok", Es.className = `badge ${e ? "err" : t ? "info" : "ok"}`;
 }
-const X0 = "https://emkc.org/api/v2/piston/execute", b0 = {
-  java: "java",
-  c: "c",
-  cpp: "c++"
-};
+const X0 = "https://wandbox.org/api/compile.json";
+async function b0(n, e) {
+  let t, i;
+  e === "java" ? t = "openjdk-head" : e === "c" ? (t = "gcc-head", i = "-x c") : t = "gcc-head";
+  const s = e === "java" ? (() => {
+    const f = n.match(/(?:public\s+)?class\s+(\w+)/);
+    return f ? `${f[1]}.java` : "Main.java";
+  })() : void 0, r = { compiler: t, code: n };
+  i && (r["compiler-option-raw"] = i), s && (r.filename = s);
+  const O = await fetch(X0, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(r)
+  });
+  if (!O.ok) throw new Error(`Wandbox returned ${O.status}`);
+  const o = await O.json(), a = (o.program_output ?? "").trimEnd(), l = (o.program_error ?? "").trimEnd(), h = (o.compiler_error ?? "").trimEnd();
+  let c = "";
+  return a && (c += a), l && (c += (c ? `
+` : "") + `STDERR:
+${l}`), h && (c += (c ? `
+` : "") + `Compile error:
+${h}`), c || (c = o.status === "0" ? "(no output)" : `Exited with status ${o.status}`), { output: c, isError: o.status !== "0" || !!h };
+}
 x0.addEventListener("click", () => {
   ou.textContent = "// Click ▶ Run to execute", Es.textContent = "ready", Es.className = "badge info";
 });
 Mt.addEventListener("click", async () => {
-  var e, t, i;
   const n = mt.state.doc.toString();
   if (Mt.classList.add("running"), Mt.textContent = "⏳ Running…", Mt.disabled = !0, Qn === "js") {
-    const s = [], r = console.log, O = console.error, o = console.warn, a = (c) => (...f) => {
-      s.push(c + f.map(
-        (u) => u === null ? "null" : u === void 0 ? "undefined" : typeof u == "object" ? JSON.stringify(u, null, 2) : String(u)
+    const e = [], t = console.log, i = console.error, s = console.warn, r = (a) => (...l) => {
+      e.push(a + l.map(
+        (h) => h === null ? "null" : h === void 0 ? "undefined" : typeof h == "object" ? JSON.stringify(h, null, 2) : String(h)
       ).join(" "));
     };
-    console.log = a(""), console.error = a("ERROR: "), console.warn = a("WARN:  ");
-    let l = !1;
+    console.log = r(""), console.error = r("ERROR: "), console.warn = r("WARN:  ");
+    let O = !1;
     try {
       new Function(n)();
-    } catch (c) {
-      s.push(`Runtime Error: ${c instanceof Error ? c.message : String(c)}`), l = !0;
+    } catch (a) {
+      e.push(`Runtime Error: ${a instanceof Error ? a.message : String(a)}`), O = !0;
     } finally {
-      console.log = r, console.error = O, console.warn = o;
+      console.log = t, console.error = i, console.warn = s;
     }
-    const h = s.length > 0 ? s.join(`
+    const o = e.length > 0 ? e.join(`
 `) : "(no output)";
-    fs(h, l), Ee({ source: "code-output", output: h });
+    fs(o, O), Ee({ source: "code-output", output: o });
   } else
     try {
-      const s = await fetch(X0, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          language: b0[Qn],
-          version: "*",
-          files: [{ content: n }]
-        })
-      });
-      if (!s.ok) throw new Error(`Piston returned ${s.status}`);
-      const r = await s.json(), O = (((e = r.run) == null ? void 0 : e.stdout) ?? "").trimEnd(), o = (((t = r.run) == null ? void 0 : t.stderr) ?? "").trimEnd(), a = ((i = r.run) == null ? void 0 : i.code) ?? 0;
-      let l = "";
-      O && (l += O), o && (l += (l ? `
-` : "") + `STDERR:
-${o}`), l || (l = a === 0 ? "(no output)" : `Exited with code ${a}`), fs(l, a !== 0 || !!o), Ee({ source: "code-output", output: l });
-    } catch (s) {
-      const r = `Could not reach Piston executor.
-${s instanceof Error ? s.message : String(s)}`;
-      fs(r, !0), Ee({ source: "code-output", output: r });
+      const { output: e, isError: t } = await b0(n, Qn);
+      fs(e, t), Ee({ source: "code-output", output: e });
+    } catch (e) {
+      const t = `Could not reach Wandbox.
+${e instanceof Error ? e.message : String(e)}`;
+      fs(t, !0), Ee({ source: "code-output", output: t });
     }
   Mt.classList.remove("running"), Mt.textContent = "▶ Run", Mt.disabled = !1;
 });
