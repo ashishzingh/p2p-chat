@@ -19624,10 +19624,10 @@ async function Wx(n, e) {
     });
   }
   if (e === "java") {
-    const s = await import("https://esm.sh/prettier@3/standalone"), r = await import("https://esm.sh/prettier-plugin-java@2"), o = r.default ?? r;
-    return await s.format(n, {
+    const { format: s } = await import("./standalone-C_GEhJUP.mjs"), { default: r } = await import("./index-Ck2TFYWR.mjs");
+    return await s(n, {
       parser: "java",
-      plugins: [o],
+      plugins: [r],
       printWidth: 100,
       tabWidth: 4
     });
