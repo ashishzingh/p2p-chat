@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin — Interview Room</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+
+  .page {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #f8fafc;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  h1 .badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: #ef4444;
+    color: #fff;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .card {
+    background: #1e2130;
+    border: 1px solid #2d3148;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .card-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #94a3b8;
+  }
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    color: #cbd5e1;
+  }
+  label span { font-size: 0.78rem; color: #64748b; }
+
+  input[type="text"],
+  input[type="password"],
+  input[type="number"],
+  select {
+    background: #0f1117;
+    border: 1px solid #2d3148;
+    border-radius: 8px;
+    color: #f1f5f9;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.9rem;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus, select:focus { border-color: #6366f1; }
+
+  .row { display: flex; gap: 0.75rem; }
+  .row label { flex: 1; }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #0f1117;
+    border: 1px solid #2d3148;
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+  }
+  .toggle-row .toggle-label { font-size: 0.88rem; color: #cbd5e1; }
+  .toggle-row .toggle-sub  { font-size: 0.75rem; color: #64748b; margin-top: 1px; }
+
+  /* toggle switch */
+  .switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0;
+    background: #374151; border-radius: 99px; cursor: pointer;
+    transition: background 0.2s;
+  }
+  .slider::before {
+    content: ''; position: absolute;
+    width: 18px; height: 18px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .switch input:checked + .slider { background: #6366f1; }
+  .switch input:checked + .slider::before { transform: translateX(18px); }
+
+  .btn {
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: #6366f1; color: #fff; }
+  .btn-secondary { background: #1e2130; border: 1px solid #2d3148; color: #cbd5e1; }
+  .btn-danger { background: #ef4444; color: #fff; }
+
+  .btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+  .status {
+    font-size: 0.82rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    display: none;
+  }
+  .status.ok    { background: #14532d33; color: #4ade80; border: 1px solid #14532d; display: block; }
+  .status.error { background: #7f1d1d33; color: #f87171; border: 1px solid #7f1d1d; display: block; }
+  .status.info  { background: #1e3a5f33; color: #60a5fa; border: 1px solid #1e3a5f; display: block; }
+
+  pre {
+    background: #0f1117;
+    border: 1px solid #2d3148;
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid #2d3148;
+  }
+
+  .key-row { display: flex; gap: 0.75rem; align-items: flex-end; }
+  .key-row label { flex: 1; margin-bottom: 0; }
+
+  footer {
+    text-align: center;
+    font-size: 0.78rem;
+    color: #334155;
+    padding-top: 0.5rem;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>⚙️ Admin Panel <span class="badge">Internal</span></h1>
+
+  <!-- Auth -->
+  <div class="card">
+    <div class="card-title">Authentication</div>
+    <div class="key-row">
+      <label>
+        Admin Key <span>Required for all requests (X-Admin-Key header)</span>
+        <input type="password" id="admin-key" placeholder="Enter admin key…" autocomplete="off" />
+      </label>
+      <button class="btn btn-secondary" id="btn-load" style="margin-bottom:1px">Load Config</button>
+    </div>
+    <div class="status" id="auth-status"></div>
+  </div>
+
+  <!-- TURN Config -->
+  <div class="card">
+    <div class="card-title">TURN Server</div>
+
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Enable TURN</div>
+        <div class="toggle-sub">Sends relay credentials to peers on join</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="f-enabled" />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <label>
+      Mode <span>static = username/password (managed services) · hmac = shared secret (self-hosted coturn)</span>
+      <select id="f-mode">
+        <option value="static">static</option>
+        <option value="hmac">hmac</option>
+      </select>
+    </label>
+
+    <label>
+      Host <span>Hostname or IP of the TURN server (no protocol prefix)</span>
+      <input type="text" id="f-host" placeholder="e.g. relay.expressturn.com" />
+    </label>
+
+    <div class="row">
+      <label>
+        UDP Port <span>Default 3478</span>
+        <input type="number" id="f-udp" placeholder="3478" min="1" max="65535" />
+      </label>
+      <label>
+        TCP Port <span>Default 3478</span>
+        <input type="number" id="f-tcp" placeholder="3478" min="1" max="65535" />
+      </label>
+      <label>
+        TLS Port <span>0 = disabled</span>
+        <input type="number" id="f-tls" placeholder="5349" min="0" max="65535" />
+      </label>
+    </div>
+
+    <hr class="divider" />
+
+    <label>
+      Username <span>Static mode only — displayed in loaded config</span>
+      <input type="text" id="f-username" placeholder="(loaded from server)" autocomplete="off" />
+    </label>
+    <label>
+      Password <span>Static mode — leave blank to keep existing value on server</span>
+      <input type="password" id="f-password" placeholder="(leave blank to keep current)" autocomplete="new-password" />
+    </label>
+    <label>
+      HMAC Secret <span>HMAC mode only — leave blank to keep existing value on server</span>
+      <input type="password" id="f-secret" placeholder="(leave blank to keep current)" autocomplete="new-password" />
+    </label>
+
+    <label>
+      Credential TTL (seconds) <span>HMAC mode only — how long generated credentials are valid</span>
+      <input type="number" id="f-ttl" placeholder="86400" min="60" />
+    </label>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-save">Save Changes</button>
+      <button class="btn btn-secondary" id="btn-reload">↺ Reload from Server</button>
+      <button class="btn btn-danger" id="btn-disable">Disable TURN</button>
+    </div>
+    <div class="status" id="save-status"></div>
+  </div>
+
+  <!-- Raw Response -->
+  <div class="card">
+    <div class="card-title">Server Response</div>
+    <pre id="raw-output">Load config to see current server state.</pre>
+  </div>
+
+  <footer>Admin panel · Interview Room</footer>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id)
+
+  function key() { return $('admin-key').value.trim() }
+
+  function setStatus(elId, msg, type) {
+    const el = $(elId)
+    el.textContent = msg
+    el.className = `status ${type}`
+  }
+
+  function showRaw(data) {
+    $('raw-output').textContent = JSON.stringify(data, null, 2)
+  }
+
+  function populateForm(cfg) {
+    $('f-enabled').checked  = !!cfg.enabled
+    $('f-mode').value       = cfg.mode        ?? 'static'
+    $('f-host').value       = cfg.host        ?? ''
+    $('f-udp').value        = cfg.udpPort     ?? 3478
+    $('f-tcp').value        = cfg.tcpPort     ?? 3478
+    $('f-tls').value        = cfg.tlsPort     ?? 0
+    $('f-username').value   = cfg.username    ?? ''
+    $('f-ttl').value        = cfg.credentialTtlSeconds ?? 86400
+    // password and secret intentionally not returned by server — leave blank
+    $('f-password').value   = ''
+    $('f-secret').value     = ''
+  }
+
+  async function loadConfig() {
+    if (!key()) { setStatus('auth-status', 'Enter your admin key first.', 'error'); return }
+    setStatus('auth-status', 'Loading…', 'info')
+    try {
+      const res = await fetch('/admin/turn', {
+        headers: { 'X-Admin-Key': key() }
+      })
+      const data = await res.json()
+      showRaw(data)
+      if (!res.ok) {
+        setStatus('auth-status', `Error ${res.status}: ${data.error ?? JSON.stringify(data)}`, 'error')
+        return
+      }
+      populateForm(data)
+      setStatus('auth-status', 'Config loaded.', 'ok')
+    } catch (e) {
+      setStatus('auth-status', `Request failed: ${e.message}`, 'error')
+    }
+  }
+
+  async function saveConfig() {
+    if (!key()) { setStatus('save-status', 'Enter your admin key first.', 'error'); return }
+
+    const body = {
+      enabled:              $('f-enabled').checked,
+      mode:                 $('f-mode').value,
+      host:                 $('f-host').value.trim(),
+      udpPort:              parseInt($('f-udp').value) || 3478,
+      tcpPort:              parseInt($('f-tcp').value) || 3478,
+      tlsPort:              parseInt($('f-tls').value) || 0,
+      username:             $('f-username').value.trim(),
+      credentialTtlSeconds: parseInt($('f-ttl').value) || 86400,
+    }
+    // only include secrets if user typed something — blank = keep existing
+    if ($('f-password').value) body.password = $('f-password').value
+    if ($('f-secret').value)   body.secret   = $('f-secret').value
+
+    setStatus('save-status', 'Saving…', 'info')
+    try {
+      const res = await fetch('/admin/turn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key() },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      showRaw(data)
+      if (!res.ok) {
+        setStatus('save-status', `Error ${res.status}: ${data.error ?? JSON.stringify(data)}`, 'error')
+        return
+      }
+      populateForm(data)
+      $('f-password').value = ''
+      $('f-secret').value   = ''
+      setStatus('save-status', 'Saved. Changes are live immediately — new peers will get updated credentials.', 'ok')
+    } catch (e) {
+      setStatus('save-status', `Request failed: ${e.message}`, 'error')
+    }
+  }
+
+  async function disableTurn() {
+    if (!key()) { setStatus('save-status', 'Enter your admin key first.', 'error'); return }
+    if (!confirm('Disable TURN? Peers already connected are unaffected — only new joins will stop receiving relay credentials.')) return
+    setStatus('save-status', 'Disabling…', 'info')
+    try {
+      const res = await fetch('/admin/turn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key() },
+        body: JSON.stringify({ enabled: false }),
+      })
+      const data = await res.json()
+      showRaw(data)
+      if (!res.ok) { setStatus('save-status', `Error ${res.status}: ${data.error ?? JSON.stringify(data)}`, 'error'); return }
+      populateForm(data)
+      setStatus('save-status', 'TURN disabled. No relay credentials will be issued until re-enabled.', 'ok')
+    } catch (e) {
+      setStatus('save-status', `Request failed: ${e.message}`, 'error')
+    }
+  }
+
+  $('btn-load').addEventListener('click', loadConfig)
+  $('btn-reload').addEventListener('click', loadConfig)
+  $('btn-save').addEventListener('click', saveConfig)
+  $('btn-disable').addEventListener('click', disableTurn)
+
+  // allow Enter in key field to trigger load
+  $('admin-key').addEventListener('keydown', e => { if (e.key === 'Enter') loadConfig() })
+</script>
+</body>
+</html>

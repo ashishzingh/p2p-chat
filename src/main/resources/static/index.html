@@ -177,6 +177,28 @@
         }
         #room-chip span { color: var(--accent); font-weight: 700; }
 
+        #turn-badge {
+            display: none;
+            align-items: center;
+            gap: 4px;
+            font-size: .62rem;
+            font-weight: 700;
+            letter-spacing: .04em;
+            color: var(--green);
+            background: rgba(63,185,80,.1);
+            border: 1px solid rgba(63,185,80,.3);
+            border-radius: 99px;
+            padding: 2px 8px;
+            flex-shrink: 0;
+        }
+        #turn-badge .turn-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 5px var(--green);
+            animation: pulse 2s infinite;
+        }
+
         .hbtn {
             position: relative;
             width: 34px; height: 34px;
@@ -897,6 +919,7 @@
             <span id="status-text">Connecting…</span>
         </div>
         <div id="room-chip">room: <span id="room-name"></span></div>
+        <div id="turn-badge"><span class="turn-dot"></span>TURN</div>
     </div>
     <div class="h-right">
         <button id="toggle-audio" class="hbtn" title="Mute / Unmute mic" disabled>🎤</button>
@@ -1033,6 +1056,11 @@
                     <span class="health-lbl">Data channel</span>
                     <span class="health-val" id="d-dc-val">—</span>
                 </div>
+                <div class="health-row">
+                    <span class="health-dot" id="d-turn-dot"></span>
+                    <span class="health-lbl">TURN relay</span>
+                    <span class="health-val" id="d-turn-val">—</span>
+                </div>
             </div>
             <div class="diag-section">
                 <div class="diag-title">Diagnosis</div>
@@ -1057,7 +1085,7 @@
                 <div class="cand-row">
                     <div class="cand-info">
                         <span class="cand-name">TURN <span style="font-weight:400;color:var(--text-2)">(relay)</span></span>
-                        <span class="cand-hint">0 means no TURN server is configured — expected for now</span>
+                        <span class="cand-hint" id="d-relay-hint">No TURN server configured — direct P2P only</span>
                     </div>
                     <span class="cand-count zero" id="d-relay-count">0</span>
                 </div>
@@ -1072,6 +1100,7 @@
                 <div class="stat-row"><span>Bytes sent</span><span class="stat-val" id="d-sent">—</span></div>
                 <div class="stat-row"><span>Bytes received</span><span class="stat-val" id="d-recv">—</span></div>
                 <div class="stat-row"><span>ICE gathering</span><span class="stat-val" id="d-gathering">—</span></div>
+                <div class="stat-row"><span>TURN server</span><span class="stat-val" id="d-turn-server">—</span></div>
             </div>
             <div class="diag-section">
                 <button id="copy-report-btn">📋 Copy Diagnostic Report</button>

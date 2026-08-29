@@ -2,6 +2,7 @@ package com.p2p;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -10,12 +11,14 @@ import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorato
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class SignalingHandler extends TextWebSocketHandler {
+
+    @Autowired
+    private TurnService turnService;
 
     private static final int SEND_TIME_LIMIT_MS = 5_000;
     private static final int SEND_BUFFER_SIZE   = 64 * 1024;
@@ -50,7 +53,14 @@ public class SignalingHandler extends TextWebSocketHandler {
                 rooms.computeIfAbsent(room, k -> ConcurrentHashMap.newKeySet());
 
             // tell the joiner how many peers were already here (decides who offers)
-            send(session, Map.of("type", "joined", "peers", peers.size()));
+            // include TURN credentials if enabled — no public HTTP endpoint needed
+            Map<String, Object> joined = new LinkedHashMap<>();
+            joined.put("type",  "joined");
+            joined.put("peers", peers.size());
+            try {
+                turnService.generateCredentials().ifPresent(turn -> joined.put("turn", turn));
+            } catch (Exception ignored) { /* TURN unavailable — client falls back to STUN */ }
+            send(session, joined);
 
             // tell everyone already in the room that someone new arrived
             for (WebSocketSession other : peers) {

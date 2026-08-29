@@ -8,7 +8,7 @@ import { oneDark } from '@codemirror/theme-one-dark'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const STUN_CONFIG: RTCConfiguration = {
+let rtcConfig: RTCConfiguration = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
@@ -97,6 +97,8 @@ const diagState = {
     pairLocalType:   '',
     pairRemoteType:  '',
     iceCheckingStart: 0,
+    turnConfigured:  false,   // set from 'joined' message if server sent turn credentials
+    turnHost:        '',      // extracted from turn URL for display
 }
 
 function resetDiagState() {
@@ -110,6 +112,7 @@ function resetDiagState() {
     diagState.pairLocalType    = ''
     diagState.pairRemoteType   = ''
     diagState.iceCheckingStart = 0
+    // turnConfigured / turnHost are session-level — not reset here
     updateDiagnosticsUI()
 }
 
@@ -127,19 +130,23 @@ function getDiagnosis(): { text: string; cls: 'ok' | 'warn' | 'error' } {
     const ice = diagState.iceState
     const srflx = diagState.localCandidates.filter(c => c.type === 'srflx').length
 
+    const relayCount = diagState.localCandidates.filter(c => c.type === 'relay').length
+
     if (ice === 'connected' || ice === 'completed') {
         const t = diagState.pairLocalType
         if (t === 'relay')
-            return { text: '⚠️ Connected via TURN relay.\nDirect P2P was not possible on this network — traffic is being routed through a relay server. Connection works but has extra latency.\nFix: add a TURN server to the ICE config.', cls: 'warn' }
+            return { text: `⚠️ Relaying via TURN (${diagState.turnHost}).\nDirect P2P failed on this network — symmetric NAT or firewall detected. All traffic is routed through the TURN server. Connection is stable but latency will be higher than direct P2P.`, cls: 'warn' }
         if (t === 'host')
-            return { text: '✅ Both peers on the same local network.\nDirect local connection — optimal.', cls: 'ok' }
-        return { text: '✅ Direct peer-to-peer connection over the internet.\nOptimal — no relay needed.', cls: 'ok' }
+            return { text: `✅ Direct connection on the same local network — optimal.${diagState.turnConfigured ? '\nTURN is on standby but not needed.' : ''}`, cls: 'ok' }
+        return { text: `✅ Direct peer-to-peer connection over the internet — optimal.${diagState.turnConfigured ? '\nTURN is on standby but not needed.' : ''}`, cls: 'ok' }
     }
 
     if (ice === 'failed') {
+        if (diagState.turnConfigured && relayCount === 0)
+            return { text: `🔴 ICE failed — TURN server unreachable.\n${diagState.turnHost} did not respond or rejected credentials.\nCheck: host/username/password in Railway env vars, firewall rules on the TURN server, UDP port 3478 open.`, cls: 'error' }
         if (srflx === 0)
-            return { text: '🔴 STUN blocked — UDP to external servers is firewalled.\nICE could not discover a public IP. Ask the other person to:\n1. Switch to mobile hotspot\n2. Disable VPN / corporate proxy\n3. Try a different network\nLong-term fix: add TURN over TLS port 443 (looks like HTTPS, bypasses most firewalls).', cls: 'error' }
-        return { text: '🔴 Symmetric NAT detected.\nSTUN resolved a public IP but the router assigns a different port for each destination, so direct P2P failed.\nLong-term fix: add a TURN server to the ICE config.', cls: 'error' }
+            return { text: '🔴 STUN blocked — UDP to external servers is firewalled.\nICE could not discover a public IP. Ask the other person to:\n1. Switch to mobile hotspot\n2. Disable VPN / corporate proxy\n3. Try a different network\nLong-term fix: configure a TURN server (already supported — enable via admin API).', cls: 'error' }
+        return { text: `🔴 Symmetric NAT detected.\nSTUN resolved a public IP but the router assigns a different port per destination — direct P2P failed.${diagState.turnConfigured ? `\nTURN (${diagState.turnHost}) was configured but also failed — check server reachability.` : '\nFix: enable the TURN server via the admin API.'}`, cls: 'error' }
     }
 
     if (ice === 'disconnected') {
@@ -206,7 +213,44 @@ function updateDiagnosticsUI() {
     }
     setCount('d-host-count',  counts.host,  false)
     setCount('d-srflx-count', counts.srflx, true)
-    setCount('d-relay-count', counts.relay, false)
+    setCount('d-relay-count', counts.relay, diagState.turnConfigured)
+
+    // Relay hint — dynamic based on TURN config
+    const relayHint = document.getElementById('d-relay-hint')
+    if (relayHint) {
+        if (diagState.turnConfigured) {
+            if (diagState.pairLocalType === 'relay')
+                relayHint.textContent = `Relaying via ${diagState.turnHost} — TURN active`
+            else if (counts.relay > 0)
+                relayHint.textContent = `TURN (${diagState.turnHost}) ready — ${counts.relay} relay candidate${counts.relay > 1 ? 's' : ''} gathered`
+            else
+                relayHint.textContent = `TURN configured (${diagState.turnHost}) — gathering...`
+        } else {
+            relayHint.textContent = 'No TURN server configured — direct P2P only'
+        }
+    }
+
+    // TURN health row
+    const turnDot = document.getElementById('d-turn-dot')
+    const turnVal = document.getElementById('d-turn-val')
+    if (turnDot && turnVal) {
+        if (!diagState.turnConfigured) {
+            turnDot.className = 'health-dot'
+            turnVal.textContent = 'Not configured'
+        } else if (diagState.pairLocalType === 'relay') {
+            turnDot.className = 'health-dot ok'
+            turnVal.textContent = `Active — routing via ${diagState.turnHost}`
+        } else if (counts.relay > 0) {
+            turnDot.className = 'health-dot ok'
+            turnVal.textContent = `Standby — ${diagState.turnHost} reachable`
+        } else if (diagState.iceState === 'failed') {
+            turnDot.className = 'health-dot error'
+            turnVal.textContent = `Unreachable — ${diagState.turnHost} did not respond`
+        } else {
+            turnDot.className = 'health-dot warn'
+            turnVal.textContent = `Configured (${diagState.turnHost}) — waiting for ICE`
+        }
+    }
 
     // Live stats
     document.getElementById('d-rtt')!.textContent  = diagState.rtt >= 0 ? `${diagState.rtt} ms` : '—'
@@ -218,6 +262,15 @@ function updateDiagnosticsUI() {
         ? `${diagState.pairLocalType} ↔ ${diagState.pairRemoteType}`
         : '—'
     document.getElementById('d-pair')!.textContent = pair
+
+    // TURN server stat row
+    const turnServerEl = document.getElementById('d-turn-server')
+    if (turnServerEl)
+        turnServerEl.textContent = diagState.turnConfigured ? diagState.turnHost : 'None'
+
+    // TURN badge — visible only when active path is relay
+    const turnBadge = document.getElementById('turn-badge')!
+    turnBadge.style.display = diagState.pairLocalType === 'relay' ? 'flex' : 'none'
 }
 
 async function pollStats() {
@@ -265,6 +318,10 @@ document.getElementById('copy-report-btn')!.addEventListener('click', () => {
     diagState.localCandidates.forEach(c => { if (c.type in counts) (counts as Record<string,number>)[c.type]++ })
     const { text } = getDiagnosis()
 
+    const turnLine = diagState.turnConfigured
+        ? `TURN server:      ${diagState.turnHost}${diagState.pairLocalType === 'relay' ? ' (active — relaying traffic)' : counts.relay > 0 ? ' (standby — reachable)' : ' (configured — gathering...)'}`
+        : 'TURN server:      Not configured'
+
     const lines = [
         '── Interview Room Diagnostic Report ──',
         `Room: ${room || '(not joined)'}`,
@@ -274,11 +331,12 @@ document.getElementById('copy-report-btn')!.addEventListener('click', () => {
         `ICE state:        ${diagState.iceState}`,
         `Data channel:     ${diagState.dcState}`,
         `ICE gathering:    ${diagState.gatheringState}`,
+        turnLine,
         '',
         'ICE Candidates gathered (local):',
         `  Host  (local IP):  ${counts.host}`,
         `  STUN  (public IP): ${counts.srflx}${counts.srflx === 0 ? '  ← UDP may be blocked' : ''}`,
-        `  TURN  (relay):     ${counts.relay}${counts.relay === 0 ? '  ← no TURN server configured' : ''}`,
+        `  TURN  (relay):     ${counts.relay}${counts.relay === 0 && !diagState.turnConfigured ? '  ← no TURN server configured' : counts.relay === 0 && diagState.turnConfigured ? '  ← TURN server may be unreachable' : ''}`,
         '',
         diagState.rtt >= 0          ? `RTT:              ${diagState.rtt} ms` : '',
         diagState.pairLocalType     ? `Active path:      ${diagState.pairLocalType} ↔ ${diagState.pairRemoteType}` : '',
@@ -375,7 +433,7 @@ joinBtn.addEventListener('click', () => {
     joinScreen.classList.add('hiding')
     setTimeout(() => {
         joinScreen.style.display = 'none'
-        connect()   // connect to signaling server only now
+        connect()
     }, 260)
 })
 
@@ -1177,7 +1235,7 @@ function setupDataChannel(ch: RTCDataChannel) {
 }
 
 function createPeerConnection() {
-    pc = new RTCPeerConnection(STUN_CONFIG)
+    pc = new RTCPeerConnection(rtcConfig)
 
     pc.onicecandidate = ({ candidate }) => {
         if (candidate) {
@@ -1282,6 +1340,20 @@ function connect() {
         if (msg.type === 'pong') return
 
         if (msg.type === 'joined') {
+            if (msg.turn?.urls) {
+                // extract hostname from first URL e.g. "turn:relay1.expressturn.com:3478?transport=udp"
+                const hostMatch = (msg.turn.urls[0] as string).match(/turn:([^:?/]+)/)
+                diagState.turnConfigured = true
+                diagState.turnHost       = hostMatch ? hostMatch[1] : 'configured'
+                rtcConfig = {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: msg.turn.urls, username: msg.turn.username, credential: msg.turn.credential },
+                    ],
+                }
+                updateDiagnosticsUI()
+            }
             if (msg.peers > 0) await startAsOfferer()
             else startAsAnswerer()
             return
