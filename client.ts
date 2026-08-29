@@ -715,12 +715,12 @@ async function formatCode(code: string, lang: string): Promise<string> {
     }
 
     if (lang === 'java') {
-        // prettier@2 standalone + prettier-plugin-java (esm.sh wraps CJS → .default has the API)
-        const prettierMod = await import('https://esm.sh/prettier@2/standalone' as string)
-        const pluginJava  = await import('https://esm.sh/prettier-plugin-java@2' as string)
-        const prettier = (prettierMod as any).default ?? prettierMod
-        const plugin   = (pluginJava  as any).default ?? pluginJava
-        return prettier.format(code, {
+        // prettier-plugin-java@2 targets prettier@3 — same version we already use for JS
+        const prettier   = await import('https://esm.sh/prettier@3/standalone' as string)
+        const pluginJava = await import('https://esm.sh/prettier-plugin-java@2' as string)
+        const plugin = (pluginJava as any).default ?? pluginJava
+        // prettier@3 format() is async
+        return await (prettier as any).format(code, {
             parser: 'java',
             plugins: [plugin],
             printWidth: 100,
