@@ -85,6 +85,7 @@ type DataMsg =
     | { source: 'diagram'; op: 'redo' }
     | { source: 'diagram'; op: 'clear' }
     | { source: 'mic-state'; muted: boolean }
+    | { source: 'chat-sync'; history: Array<{ who: string; text: string }> }
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
@@ -539,7 +540,10 @@ function setStatus(text: string, state: 'connected' | 'waiting' | 'error' | '') 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 
 // who = 'you' | 'system' | <peer display name>
+const chatHistory: Array<{ who: string; text: string }> = []
+
 function appendMessage(who: string, text: string) {
+    if (who !== 'system') chatHistory.push({ who, text })
     if (who === 'system') {
         const el = document.createElement('div')
         el.className = 'system-msg'
@@ -1463,6 +1467,10 @@ function handleDataMessage(raw: string, peerId: string) {
         document.getElementById(`pip-tile-${peerId}`)?.classList.toggle('peer-muted', msg.muted)
         return
     }
+    if (msg.source === 'chat-sync') {
+        msg.history.forEach(m => appendMessage(m.who, m.text))
+        return
+    }
 }
 
 function setupDataChannel(ch: RTCDataChannel, peerId: string) {
@@ -1480,6 +1488,7 @@ function setupDataChannel(ch: RTCDataChannel, peerId: string) {
             ch.send(JSON.stringify({ source: 'code', content: editor.state.doc.toString(), lang: currentLang }))
             if (problemEditor.value) ch.send(JSON.stringify({ source: 'problem', content: problemEditor.value }))
             if (strokes.length > 0) ch.send(JSON.stringify({ source: 'diagram', op: 'full-sync', strokes }))
+            if (chatHistory.length > 0) ch.send(JSON.stringify({ source: 'chat-sync', history: chatHistory }))
         }
         appendMessage('system', `${state?.name || 'Peer'} connected`)
         diagState.dcState = 'open'
