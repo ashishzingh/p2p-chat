@@ -54,19 +54,21 @@ const wsUrl = `${proto}://${location.host}/signal`
 
 type Point = { x: number; y: number }
 
-interface Stroke {
-    color: string
-    erasing: boolean
-    points: Point[]
-}
+type Stroke =
+    | { type: 'pen';     color: string; erasing: boolean; width: number; points: Point[] }
+    | { type: 'line';    color: string; width: number; x1: number; y1: number; x2: number; y2: number }
+    | { type: 'rect';    color: string; width: number; filled: boolean; x: number; y: number; w: number; h: number }
+    | { type: 'ellipse'; color: string; width: number; filled: boolean; cx: number; cy: number; rx: number; ry: number }
+    | { type: 'arrow';   color: string; width: number; x1: number; y1: number; x2: number; y2: number }
+    | { type: 'text';    color: string; fontSize: number; x: number; y: number; text: string }
 
 type DataMsg =
     | { source: 'hello'; name: string }
     | { source: 'chat'; text: string }
     | { source: 'code'; content: string; lang: string }
     | { source: 'code-output'; output: string }
-    | { source: 'diagram'; op: 'line'; x1: number; y1: number; x2: number; y2: number; erasing: boolean }
-    | { source: 'diagram'; op: 'stroke-complete'; color: string; erasing: boolean; points: Point[] }
+    | { source: 'diagram'; op: 'line'; x1: number; y1: number; x2: number; y2: number; erasing: boolean; width: number }
+    | { source: 'diagram'; op: 'stroke-complete'; stroke: Stroke }
     | { source: 'diagram'; op: 'undo' }
     | { source: 'diagram'; op: 'redo' }
     | { source: 'diagram'; op: 'clear' }
@@ -705,17 +707,27 @@ runBtn.addEventListener('click', async () => {
 
 // ── Whiteboard ────────────────────────────────────────────────────────────────
 
-const canvas = document.getElementById('whiteboard') as HTMLCanvasElement
-const ctx2d  = canvas.getContext('2d')!
+type DrawTool = 'pen' | 'eraser' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text'
 
-let erasing       = false
-let myDrawColor   = MY_COLOR
-let drawing       = false
+const canvas  = document.getElementById('whiteboard') as HTMLCanvasElement
+const ctx2d   = canvas.getContext('2d')!
+const wbWrap  = document.getElementById('whiteboard-wrap') as HTMLDivElement
+
+let currentTool: DrawTool = 'pen'
+let strokeWidth  = 2.5
+let shapeFilled  = false
+let myDrawColor  = MY_COLOR
+let drawing      = false
 let lx = 0, ly = 0
+let shapeStartX  = 0, shapeStartY = 0
+let shiftHeld    = false
 
 let strokes: Stroke[]   = []
 let undoStack: Stroke[] = []
 let currentStroke: Stroke | null = null
+
+document.addEventListener('keydown', e => { if (e.key === 'Shift') shiftHeld = true  })
+document.addEventListener('keyup',   e => { if (e.key === 'Shift') shiftHeld = false })
 
 function resizeCanvas() {
     const rect = canvas.getBoundingClientRect()
@@ -731,43 +743,81 @@ function redrawCanvas() {
 }
 
 function drawStroke(s: Stroke) {
-    if (s.points.length < 2) return
     ctx2d.save()
-    if (s.erasing) {
-        ctx2d.globalCompositeOperation = 'destination-out'
-        ctx2d.lineWidth = 20
-        ctx2d.strokeStyle = 'rgba(0,0,0,1)'
-    } else {
-        ctx2d.globalCompositeOperation = 'source-over'
-        ctx2d.lineWidth = 2.5
-        ctx2d.strokeStyle = s.color
+    switch (s.type) {
+        case 'pen': {
+            if (s.points.length < 2) break
+            if (s.erasing) {
+                ctx2d.globalCompositeOperation = 'destination-out'
+                ctx2d.lineWidth = Math.max(20, s.width * 5)
+                ctx2d.strokeStyle = 'rgba(0,0,0,1)'
+            } else {
+                ctx2d.globalCompositeOperation = 'source-over'
+                ctx2d.lineWidth = s.width
+                ctx2d.strokeStyle = s.color
+            }
+            ctx2d.lineCap = 'round'; ctx2d.lineJoin = 'round'
+            ctx2d.beginPath()
+            ctx2d.moveTo(s.points[0].x, s.points[0].y)
+            for (let i = 1; i < s.points.length; i++) ctx2d.lineTo(s.points[i].x, s.points[i].y)
+            ctx2d.stroke()
+            break
+        }
+        case 'line': {
+            ctx2d.strokeStyle = s.color; ctx2d.lineWidth = s.width; ctx2d.lineCap = 'round'
+            ctx2d.beginPath(); ctx2d.moveTo(s.x1, s.y1); ctx2d.lineTo(s.x2, s.y2); ctx2d.stroke()
+            break
+        }
+        case 'rect': {
+            ctx2d.strokeStyle = s.color; ctx2d.fillStyle = s.color; ctx2d.lineWidth = s.width
+            if (s.filled) ctx2d.fillRect(s.x, s.y, s.w, s.h)
+            else          ctx2d.strokeRect(s.x, s.y, s.w, s.h)
+            break
+        }
+        case 'ellipse': {
+            ctx2d.strokeStyle = s.color; ctx2d.fillStyle = s.color; ctx2d.lineWidth = s.width
+            ctx2d.beginPath()
+            ctx2d.ellipse(s.cx, s.cy, Math.max(1, Math.abs(s.rx)), Math.max(1, Math.abs(s.ry)), 0, 0, 2 * Math.PI)
+            if (s.filled) ctx2d.fill(); else ctx2d.stroke()
+            break
+        }
+        case 'arrow': {
+            const ang  = Math.atan2(s.y2 - s.y1, s.x2 - s.x1)
+            const head = Math.max(12, s.width * 5)
+            ctx2d.strokeStyle = s.color; ctx2d.fillStyle = s.color
+            ctx2d.lineWidth = s.width; ctx2d.lineCap = 'round'
+            ctx2d.beginPath(); ctx2d.moveTo(s.x1, s.y1); ctx2d.lineTo(s.x2, s.y2); ctx2d.stroke()
+            ctx2d.beginPath()
+            ctx2d.moveTo(s.x2, s.y2)
+            ctx2d.lineTo(s.x2 - head * Math.cos(ang - Math.PI / 6), s.y2 - head * Math.sin(ang - Math.PI / 6))
+            ctx2d.lineTo(s.x2 - head * Math.cos(ang + Math.PI / 6), s.y2 - head * Math.sin(ang + Math.PI / 6))
+            ctx2d.closePath(); ctx2d.fill()
+            break
+        }
+        case 'text': {
+            ctx2d.fillStyle = s.color
+            ctx2d.font = `${s.fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`
+            ctx2d.textBaseline = 'top'
+            s.text.split('\n').forEach((line, i) => ctx2d.fillText(line, s.x, s.y + i * s.fontSize * 1.3))
+            break
+        }
     }
-    ctx2d.lineCap  = 'round'
-    ctx2d.lineJoin = 'round'
-    ctx2d.beginPath()
-    ctx2d.moveTo(s.points[0].x, s.points[0].y)
-    for (let i = 1; i < s.points.length; i++) ctx2d.lineTo(s.points[i].x, s.points[i].y)
-    ctx2d.stroke()
     ctx2d.restore()
 }
 
-function drawSegment(x1: number, y1: number, x2: number, y2: number, color: string, erase: boolean) {
+function drawSegment(x1: number, y1: number, x2: number, y2: number, color: string, erase: boolean, width = strokeWidth) {
     ctx2d.save()
     if (erase) {
         ctx2d.globalCompositeOperation = 'destination-out'
-        ctx2d.lineWidth = 20
+        ctx2d.lineWidth = Math.max(20, width * 5)
         ctx2d.strokeStyle = 'rgba(0,0,0,1)'
     } else {
         ctx2d.globalCompositeOperation = 'source-over'
-        ctx2d.lineWidth = 2.5
+        ctx2d.lineWidth = width
         ctx2d.strokeStyle = color
     }
-    ctx2d.lineCap  = 'round'
-    ctx2d.lineJoin = 'round'
-    ctx2d.beginPath()
-    ctx2d.moveTo(x1, y1)
-    ctx2d.lineTo(x2, y2)
-    ctx2d.stroke()
+    ctx2d.lineCap = 'round'; ctx2d.lineJoin = 'round'
+    ctx2d.beginPath(); ctx2d.moveTo(x1, y1); ctx2d.lineTo(x2, y2); ctx2d.stroke()
     ctx2d.restore()
 }
 
@@ -776,38 +826,117 @@ function getCanvasPos(e: MouseEvent): Point {
     return { x: e.clientX - r.left, y: e.clientY - r.top }
 }
 
+function snapToAngle(sx: number, sy: number, ex: number, ey: number): Point {
+    const angle   = Math.atan2(ey - sy, ex - sx)
+    const snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4)
+    const dist    = Math.hypot(ex - sx, ey - sy)
+    return { x: sx + dist * Math.cos(snapped), y: sy + dist * Math.sin(snapped) }
+}
+
+function makeShapeStroke(sx: number, sy: number, ex: number, ey: number): Stroke | null {
+    switch (currentTool) {
+        case 'line':    return { type: 'line',  color: myDrawColor, width: strokeWidth, x1: sx, y1: sy, x2: ex, y2: ey }
+        case 'arrow':   return { type: 'arrow', color: myDrawColor, width: strokeWidth, x1: sx, y1: sy, x2: ex, y2: ey }
+        case 'rect':    return { type: 'rect',    color: myDrawColor, width: strokeWidth, filled: shapeFilled,
+            x: Math.min(sx, ex), y: Math.min(sy, ey), w: Math.abs(ex - sx), h: Math.abs(ey - sy) }
+        case 'ellipse': return { type: 'ellipse', color: myDrawColor, width: strokeWidth, filled: shapeFilled,
+            cx: (sx + ex) / 2, cy: (sy + ey) / 2, rx: Math.abs(ex - sx) / 2, ry: Math.abs(ey - sy) / 2 }
+        default: return null
+    }
+}
+
 canvas.addEventListener('mousedown', e => {
-    drawing   = true
-    undoStack = []
+    if (currentTool === 'text') return
+    drawing = true; undoStack = []
     const pos = getCanvasPos(e)
-    currentStroke = { color: myDrawColor, erasing, points: [pos] }
+    shapeStartX = pos.x; shapeStartY = pos.y
     lx = pos.x; ly = pos.y
+    if (currentTool === 'pen' || currentTool === 'eraser') {
+        currentStroke = { type: 'pen', color: myDrawColor, erasing: currentTool === 'eraser', width: strokeWidth, points: [pos] }
+    } else {
+        currentStroke = null
+    }
 })
 
 canvas.addEventListener('mousemove', e => {
-    if (!drawing || !currentStroke) return
+    if (!drawing) return
     const { x, y } = getCanvasPos(e)
-    currentStroke.points.push({ x, y })
-    drawSegment(lx, ly, x, y, myDrawColor, erasing)
-    sendData({ source: 'diagram', op: 'line', x1: lx, y1: ly, x2: x, y2: y, erasing })
+    if (currentTool === 'pen' || currentTool === 'eraser') {
+        const cs = currentStroke as Extract<Stroke, { type: 'pen' }> | null
+        if (!cs) return
+        cs.points.push({ x, y })
+        const erase = currentTool === 'eraser'
+        drawSegment(lx, ly, x, y, myDrawColor, erase)
+        sendData({ source: 'diagram', op: 'line', x1: lx, y1: ly, x2: x, y2: y, erasing: erase, width: strokeWidth })
+    } else {
+        const snap = (currentTool === 'line' || currentTool === 'arrow') && shiftHeld
+        const end  = snap ? snapToAngle(shapeStartX, shapeStartY, x, y) : { x, y }
+        redrawCanvas()
+        const preview = makeShapeStroke(shapeStartX, shapeStartY, end.x, end.y)
+        if (preview) drawStroke(preview)
+    }
     lx = x; ly = y
 })
 
 function finishStroke() {
-    if (!drawing || !currentStroke) return
+    if (!drawing) return
     drawing = false
-    strokes.push(currentStroke)
-    sendData({
-        source: 'diagram', op: 'stroke-complete',
-        color: currentStroke.color,
-        erasing: currentStroke.erasing,
-        points: currentStroke.points,
-    })
-    currentStroke = null
+    if (currentTool === 'pen' || currentTool === 'eraser') {
+        if (!currentStroke) return
+        strokes.push(currentStroke)
+        sendData({ source: 'diagram', op: 'stroke-complete', stroke: currentStroke })
+        currentStroke = null
+    } else {
+        const snap = (currentTool === 'line' || currentTool === 'arrow') && shiftHeld
+        const end  = snap ? snapToAngle(shapeStartX, shapeStartY, lx, ly) : { x: lx, y: ly }
+        const s    = makeShapeStroke(shapeStartX, shapeStartY, end.x, end.y)
+        if (s) {
+            strokes.push(s)
+            redrawCanvas()
+            sendData({ source: 'diagram', op: 'stroke-complete', stroke: s })
+        }
+    }
 }
 
-canvas.addEventListener('mouseup', finishStroke)
+canvas.addEventListener('mouseup',    finishStroke)
 canvas.addEventListener('mouseleave', finishStroke)
+
+// ── Text tool ─────────────────────────────────────────────────────────────────
+
+canvas.addEventListener('click', e => {
+    if (currentTool !== 'text') return
+    const pos   = getCanvasPos(e)
+    const input = document.createElement('textarea')
+    input.rows  = 1
+    input.style.cssText = [
+        `position:absolute`, `left:${pos.x}px`, `top:${pos.y - 2}px`,
+        `min-width:80px`, `max-width:${canvas.width - pos.x - 12}px`,
+        `background:transparent`, `border:1.5px dashed ${myDrawColor}`, `border-radius:3px`,
+        `outline:none`, `color:${myDrawColor}`,
+        `font:16px -apple-system,BlinkMacSystemFont,sans-serif`, `line-height:1.3`,
+        `resize:none`, `padding:2px 5px`, `z-index:20`, `overflow:hidden`,
+    ].join(';')
+    wbWrap.appendChild(input)
+    input.focus()
+
+    const commit = () => {
+        const text = input.value.trim()
+        input.remove()
+        if (!text) return
+        undoStack = []
+        const s: Stroke = { type: 'text', color: myDrawColor, fontSize: 16, x: pos.x, y: pos.y, text }
+        strokes.push(s); drawStroke(s)
+        sendData({ source: 'diagram', op: 'stroke-complete', stroke: s })
+    }
+    input.addEventListener('keydown', ev => {
+        if (ev.key === 'Escape') { input.remove(); return }
+        if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); commit(); return }
+        setTimeout(() => { input.style.height = 'auto'; input.style.height = input.scrollHeight + 'px' }, 0)
+    })
+    input.addEventListener('blur', commit)
+})
+
+// ── Undo / Redo ───────────────────────────────────────────────────────────────
 
 function undo() {
     if (strokes.length === 0) return
@@ -832,37 +961,55 @@ document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo() }
 })
 
-document.getElementById('tool-pen')!.addEventListener('click', () => {
-    erasing = false
-    canvas.style.cursor = 'crosshair'
-    document.getElementById('tool-pen')!.classList.add('active')
-    document.getElementById('tool-eraser')!.classList.remove('active')
-})
-document.getElementById('tool-eraser')!.addEventListener('click', () => {
-    erasing = true
-    canvas.style.cursor = 'cell'
-    document.getElementById('tool-eraser')!.classList.add('active')
-    document.getElementById('tool-pen')!.classList.remove('active')
+// ── Tool selection ────────────────────────────────────────────────────────────
+
+const TOOL_CURSORS: Record<DrawTool, string> = {
+    pen: 'crosshair', eraser: 'cell', line: 'crosshair',
+    rect: 'crosshair', ellipse: 'crosshair', arrow: 'crosshair', text: 'text',
+}
+
+function setActiveTool(tool: DrawTool) {
+    currentTool = tool
+    canvas.style.cursor = TOOL_CURSORS[tool]
+    ;(['pen','eraser','line','rect','ellipse','arrow','text'] as DrawTool[]).forEach(t =>
+        document.getElementById(`tool-${t}`)?.classList.toggle('active', t === tool))
+}
+
+;(['pen','eraser','line','rect','ellipse','arrow','text'] as DrawTool[]).forEach(t =>
+    document.getElementById(`tool-${t}`)?.addEventListener('click', () => setActiveTool(t)))
+
+// Fill toggle
+const fillToggleBtn = document.getElementById('tool-fill-toggle')!
+fillToggleBtn.addEventListener('click', () => {
+    shapeFilled = !shapeFilled
+    fillToggleBtn.classList.toggle('active', shapeFilled)
+    fillToggleBtn.textContent = shapeFilled ? '◆ Fill' : '◇ Fill'
 })
 
+// Width picker
+document.querySelectorAll('.width-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        strokeWidth = parseFloat((btn as HTMLElement).dataset.width!)
+        document.querySelectorAll('.width-btn').forEach(b => b.classList.remove('active'))
+        btn.classList.add('active')
+    })
+})
+
+// Color swatches
 document.querySelectorAll('.swatch').forEach(s => {
     s.addEventListener('click', () => {
-        erasing = false
         myDrawColor = (s as HTMLElement).dataset.color!
-        document.getElementById('tool-pen')!.classList.add('active')
-        document.getElementById('tool-eraser')!.classList.remove('active')
+        if (currentTool === 'eraser') setActiveTool('pen')
         document.querySelectorAll('.swatch').forEach(x => x.classList.remove('active'))
         s.classList.add('active')
-        canvas.style.cursor = 'crosshair'
     })
 })
 
 const customColor = document.getElementById('custom-color') as HTMLInputElement
 customColor.addEventListener('input', () => {
-    erasing = false
     myDrawColor = customColor.value
+    if (currentTool === 'eraser') setActiveTool('pen')
     document.querySelectorAll('.swatch').forEach(x => x.classList.remove('active'))
-    canvas.style.cursor = 'crosshair'
 })
 
 document.getElementById('clear-canvas')!.addEventListener('click', () => {
@@ -880,11 +1027,16 @@ document.getElementById('save-canvas-btn')!.addEventListener('click', () => {
 function applyRemoteDiagram(msg: Extract<DataMsg, { source: 'diagram' }>) {
     switch (msg.op) {
         case 'line':
-            drawSegment(msg.x1, msg.y1, msg.x2, msg.y2, PEER_COLOR, msg.erasing)
+            drawSegment(msg.x1, msg.y1, msg.x2, msg.y2, PEER_COLOR, msg.erasing, msg.width)
             break
-        case 'stroke-complete':
-            strokes.push({ color: PEER_COLOR, erasing: msg.erasing, points: msg.points })
+        case 'stroke-complete': {
+            const s: Stroke = msg.stroke.type === 'pen'
+                ? { ...msg.stroke, color: PEER_COLOR }
+                : msg.stroke
+            strokes.push(s)
+            if (s.type !== 'pen') drawStroke(s)
             break
+        }
         case 'undo':
             if (strokes.length > 0) { undoStack.push(strokes.pop()!); redrawCanvas() }
             break

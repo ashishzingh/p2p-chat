@@ -416,11 +416,16 @@
 
         /* ── Whiteboard ── */
         #diagram-toolbar {
-            display: flex; align-items: center; gap: 8px;
-            padding: 7px 10px;
+            display: flex; flex-direction: column;
             border-bottom: 1px solid var(--bg-3);
-            flex-shrink: 0; background: var(--bg-1); flex-wrap: wrap;
+            flex-shrink: 0; background: var(--bg-1);
         }
+        .toolbar-row {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 10px; flex-wrap: wrap;
+        }
+        .toolbar-row + .toolbar-row { border-top: 1px solid var(--bg-3); }
+        .tool-sep { width: 1px; height: 18px; background: var(--bg-3); flex-shrink: 0; margin: 0 1px; }
         .tool-btn {
             padding: 3px 11px;
             background: var(--bg-2); border: 1px solid var(--bg-3);
@@ -438,7 +443,22 @@
         .diagram-legend { font-size: .7rem; font-weight: 700; display: flex; align-items: center; gap: 4px; }
         .diagram-legend.you  { color: var(--accent); }
         .diagram-legend.peer { color: var(--accent-b); }
-        #whiteboard { flex: 1; display: block; cursor: crosshair; touch-action: none; background: var(--bg-0); }
+        #whiteboard-wrap { flex: 1; position: relative; overflow: hidden; }
+        #whiteboard { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; background: var(--bg-0); }
+
+        /* ── Width picker ── */
+        #width-swatches { display: flex; align-items: center; gap: 5px; }
+        .width-btn {
+            background: var(--text-0); border-radius: 50%; border: 2px solid transparent;
+            cursor: pointer; padding: 0; flex-shrink: 0;
+            transition: border-color .12s, transform .12s;
+        }
+        .width-btn:hover { transform: scale(1.18); }
+        .width-btn.active { border-color: var(--accent); }
+        .width-btn[data-width="1.5"] { width: 7px;  height: 7px;  }
+        .width-btn[data-width="3"]   { width: 11px; height: 11px; }
+        .width-btn[data-width="6"]   { width: 16px; height: 16px; }
+        .width-btn[data-width="12"]  { width: 22px; height: 22px; }
 
         /* ── Network tab ── */
         #tab-network { overflow-y: auto; padding: 14px; gap: 10px; flex-direction: column; }
@@ -921,28 +941,47 @@
         <!-- Whiteboard tab -->
         <div id="tab-diagram" class="tab-panel">
             <div id="diagram-toolbar">
-                <button class="tool-btn active" id="tool-pen">✏ Pen</button>
-                <button class="tool-btn" id="tool-eraser">◻ Eraser</button>
-                <div id="color-swatches">
-                    <button class="swatch active" data-color="#a78bfa" style="background:#a78bfa" title="Purple"></button>
-                    <button class="swatch" data-color="#38bdf8" style="background:#38bdf8" title="Blue"></button>
-                    <button class="swatch" data-color="#3fb950" style="background:#3fb950" title="Green"></button>
-                    <button class="swatch" data-color="#f85149" style="background:#f85149" title="Red"></button>
-                    <button class="swatch" data-color="#d29922" style="background:#d29922" title="Yellow"></button>
-                    <button class="swatch" data-color="#e6edf3" style="background:#e6edf3" title="White"></button>
-                    <button class="swatch" data-color="#1f2328" style="background:#1f2328;border:1px solid #555" title="Black"></button>
-                    <input type="color" id="custom-color" value="#a78bfa" title="Custom colour">
+                <!-- Row 1: drawing tools + width + fill -->
+                <div class="toolbar-row">
+                    <button class="tool-btn active" id="tool-pen" title="Freehand pen">✏ Pen</button>
+                    <button class="tool-btn" id="tool-line" title="Straight line (Shift = snap 45°)">╱ Line</button>
+                    <button class="tool-btn" id="tool-rect" title="Rectangle">□ Rect</button>
+                    <button class="tool-btn" id="tool-ellipse" title="Ellipse / Circle">○ Ellipse</button>
+                    <button class="tool-btn" id="tool-arrow" title="Arrow (Shift = snap 45°)">→ Arrow</button>
+                    <button class="tool-btn" id="tool-text" title="Text label (Enter to confirm)">T Text</button>
+                    <button class="tool-btn" id="tool-eraser" title="Eraser">◻ Erase</button>
+                    <span class="tool-sep"></span>
+                    <button class="tool-btn" id="tool-fill-toggle" title="Toggle fill for Rect / Ellipse">◇ Fill</button>
+                    <div id="width-swatches">
+                        <button class="width-btn active" data-width="1.5" title="Fine"></button>
+                        <button class="width-btn" data-width="3" title="Medium"></button>
+                        <button class="width-btn" data-width="6" title="Thick"></button>
+                        <button class="width-btn" data-width="12" title="Marker"></button>
+                    </div>
                 </div>
-                <button class="tool-btn" id="undo-btn" title="Undo (Ctrl+Z)">↩</button>
-                <button class="tool-btn" id="redo-btn" title="Redo (Ctrl+Y)">↪</button>
-                <div style="display:flex;gap:8px;margin-left:auto;align-items:center">
-                    <span class="diagram-legend you">● You</span>
-                    <span class="diagram-legend peer">● Peer</span>
-                    <button class="tool-btn" id="save-canvas-btn" title="Export as PNG">↓ PNG</button>
-                    <button class="tool-btn" id="clear-canvas">Clear All</button>
+                <!-- Row 2: colors + actions -->
+                <div class="toolbar-row">
+                    <div id="color-swatches">
+                        <button class="swatch active" data-color="#a78bfa" style="background:#a78bfa" title="Purple"></button>
+                        <button class="swatch" data-color="#38bdf8" style="background:#38bdf8" title="Blue"></button>
+                        <button class="swatch" data-color="#3fb950" style="background:#3fb950" title="Green"></button>
+                        <button class="swatch" data-color="#f85149" style="background:#f85149" title="Red"></button>
+                        <button class="swatch" data-color="#d29922" style="background:#d29922" title="Yellow"></button>
+                        <button class="swatch" data-color="#e6edf3" style="background:#e6edf3" title="White"></button>
+                        <button class="swatch" data-color="#1f2328" style="background:#1f2328;border:1px solid #555" title="Black"></button>
+                        <input type="color" id="custom-color" value="#a78bfa" title="Custom colour">
+                    </div>
+                    <button class="tool-btn" id="undo-btn" title="Undo (Ctrl+Z)">↩</button>
+                    <button class="tool-btn" id="redo-btn" title="Redo (Ctrl+Y)">↪</button>
+                    <div style="display:flex;gap:8px;margin-left:auto;align-items:center">
+                        <span class="diagram-legend you">● You</span>
+                        <span class="diagram-legend peer">● Peer</span>
+                        <button class="tool-btn" id="save-canvas-btn" title="Export as PNG">↓ PNG</button>
+                        <button class="tool-btn" id="clear-canvas">Clear All</button>
+                    </div>
                 </div>
             </div>
-            <canvas id="whiteboard"></canvas>
+            <div id="whiteboard-wrap"><canvas id="whiteboard"></canvas></div>
         </div>
 
         <!-- Network tab -->
