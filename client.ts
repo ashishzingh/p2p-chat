@@ -70,6 +70,7 @@ type DataMsg =
     | { source: 'problem'; content: string }
     | { source: 'diagram'; op: 'line'; x1: number; y1: number; x2: number; y2: number; erasing: boolean; width: number }
     | { source: 'diagram'; op: 'stroke-complete'; stroke: Stroke }
+    | { source: 'diagram'; op: 'full-sync';       strokes: Stroke[] }
     | { source: 'diagram'; op: 'undo' }
     | { source: 'diagram'; op: 'redo' }
     | { source: 'diagram'; op: 'clear' }
@@ -1292,6 +1293,11 @@ function applyRemoteDiagram(msg: Extract<DataMsg, { source: 'diagram' }>) {
         case 'redo':
             if (undoStack.length > 0) { strokes.push(undoStack.pop()!); redrawCanvas() }
             break
+        case 'full-sync':
+            strokes = msg.strokes
+            undoStack = []
+            redrawCanvas()
+            break
         case 'clear':
             strokes = []; undoStack = []
             ctx2d.clearRect(0, 0, canvas.width, canvas.height)
@@ -1382,12 +1388,13 @@ pipMicBtn.addEventListener('click', toggleMic)
 // ── WebRTC — full-mesh multi-peer ─────────────────────────────────────────────
 
 interface PeerState {
-    pc:      RTCPeerConnection
-    dc:      RTCDataChannel | null
-    name:    string
-    pending: RTCIceCandidateInit[]
-    tileEl:  HTMLDivElement
-    videoEl: HTMLVideoElement
+    pc:         RTCPeerConnection
+    dc:         RTCDataChannel | null
+    name:       string
+    pending:    RTCIceCandidateInit[]
+    tileEl:     HTMLDivElement
+    videoEl:    HTMLVideoElement
+    isExisting: boolean   // true when we were already in the room when this peer joined
 }
 
 const peers = new Map<string, PeerState>()
@@ -1441,7 +1448,12 @@ function setupDataChannel(ch: RTCDataChannel, peerId: string) {
         sendBtn.disabled  = false
         setStatus('Connected', 'connected')
         ch.send(JSON.stringify({ source: 'hello', name: myName }))
-        if (problemEditor.value) ch.send(JSON.stringify({ source: 'problem', content: problemEditor.value }))
+        if (state?.isExisting) {
+            // Sync current room state to the newly joined peer
+            ch.send(JSON.stringify({ source: 'code', content: editor.state.doc.toString(), lang: currentLang }))
+            if (problemEditor.value) ch.send(JSON.stringify({ source: 'problem', content: problemEditor.value }))
+            if (strokes.length > 0) ch.send(JSON.stringify({ source: 'diagram', op: 'full-sync', strokes }))
+        }
         appendMessage('system', `${state?.name || 'Peer'} connected`)
         diagState.dcState = 'open'
         updateDiagnosticsUI()
@@ -1491,7 +1503,7 @@ function createPeerTile(peerId: string): { tileEl: HTMLDivElement; videoEl: HTML
 
 // ── Connect to one peer ───────────────────────────────────────────────────────
 
-function connectToPeer(peerId: string) {
+function connectToPeer(peerId: string, isExisting = false) {
     if (peers.has(peerId)) return
 
     let pc: RTCPeerConnection
@@ -1505,7 +1517,7 @@ function connectToPeer(peerId: string) {
     }
 
     const { tileEl, videoEl } = createPeerTile(peerId)
-    const state: PeerState = { pc, dc: null, name: 'Peer', pending: [], tileEl, videoEl }
+    const state: PeerState = { pc, dc: null, name: 'Peer', pending: [], tileEl, videoEl, isExisting }
     peers.set(peerId, state)
 
     pc.onicecandidate = ({ candidate }) => {
@@ -1654,7 +1666,7 @@ function connect() {
         if (msg.type === 'peer-joined') {
             playPing()
             appendMessage('system', 'Someone joined the room')
-            connectToPeer(msg.peerId as string)
+            connectToPeer(msg.peerId as string, true)
             return
         }
 
