@@ -67,6 +67,7 @@ type DataMsg =
     | { source: 'chat'; text: string }
     | { source: 'code'; content: string; lang: string }
     | { source: 'code-output'; output: string }
+    | { source: 'problem'; content: string }
     | { source: 'diagram'; op: 'line'; x1: number; y1: number; x2: number; y2: number; erasing: boolean; width: number }
     | { source: 'diagram'; op: 'stroke-complete'; stroke: Stroke }
     | { source: 'diagram'; op: 'undo' }
@@ -696,12 +697,36 @@ document.getElementById('download-code-btn')!.addEventListener('click', () => {
     URL.revokeObjectURL(url)
 })
 
-// ── Problem section toggle ────────────────────────────────────────────────────
+// ── Problem section toggle + live sync ───────────────────────────────────────
 
 const problemSection = document.getElementById('problem-section')!
+const problemEditor  = document.getElementById('problem-editor') as HTMLTextAreaElement
+
 document.getElementById('problem-header')!.addEventListener('click', () => {
     problemSection.classList.toggle('collapsed')
 })
+
+let problemDebounce: ReturnType<typeof setTimeout> | null = null
+let applyingRemoteProblem = false
+
+problemEditor.addEventListener('input', () => {
+    if (applyingRemoteProblem) return
+    if (problemDebounce) clearTimeout(problemDebounce)
+    problemDebounce = setTimeout(() => {
+        sendData({ source: 'problem', content: problemEditor.value })
+    }, 250)
+})
+
+function applyRemoteProblem(content: string) {
+    applyingRemoteProblem = true
+    const pos = problemEditor.selectionStart
+    problemEditor.value = content
+    // restore cursor only if the textarea is focused (i.e. the peer is editing locally too)
+    try { problemEditor.setSelectionRange(Math.min(pos, content.length), Math.min(pos, content.length)) } catch {}
+    applyingRemoteProblem = false
+    // expand collapsed problem section so the receiver notices the update
+    problemSection.classList.remove('collapsed')
+}
 
 runBtn.addEventListener('click', async () => {
     const code = editor.state.doc.toString()
@@ -1212,6 +1237,7 @@ function handleDataMessage(raw: string) {
     if (msg.source === 'code')        return applyRemoteCode(msg.content, msg.lang)
     if (msg.source === 'code-output') return showOutput(msg.output, msg.output.startsWith('ERROR'), msg.output.startsWith('⚠️'))
     if (msg.source === 'diagram')     return applyRemoteDiagram(msg)
+    if (msg.source === 'problem')     return applyRemoteProblem(msg.content)
 }
 
 function setupDataChannel(ch: RTCDataChannel) {
@@ -1221,6 +1247,7 @@ function setupDataChannel(ch: RTCDataChannel) {
         msgInput.disabled = false
         sendBtn.disabled  = false
         sendData({ source: 'hello', name: myName })
+        if (problemEditor.value) sendData({ source: 'problem', content: problemEditor.value })
         appendMessage('system', 'Connected to peer')
         diagState.dcState = 'open'
         updateDiagnosticsUI()
