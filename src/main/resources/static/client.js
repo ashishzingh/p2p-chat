@@ -20026,9 +20026,7 @@ window.addEventListener("resize", () => {
   document.querySelector("#tab-diagram.active") && ed();
 });
 let fe = null;
-const Th = document.getElementById("local-video");
-document.getElementById("remote-video");
-const pO = document.getElementById("toggle-video"), Or = document.getElementById("toggle-audio"), mO = document.getElementById("pip-cam-btn"), ar = document.getElementById("pip-mic-btn");
+const Th = document.getElementById("local-video"), pO = document.getElementById("toggle-video"), Or = document.getElementById("toggle-audio"), mO = document.getElementById("pip-cam-btn"), ar = document.getElementById("pip-mic-btn");
 function Uh(n) {
   pO.textContent = n ? "📹" : "📷", pO.classList.toggle("active", n), mO.textContent = n ? "📹" : "📷", mO.classList.toggle("off", !n), document.getElementById("pip-local").classList.toggle("cam-on", n);
   const e = n;
@@ -20044,7 +20042,14 @@ async function ad() {
     try {
       fe = await navigator.mediaDevices.getUserMedia({ video: !0, audio: !0 }), Th.srcObject = fe, Uh(!0), Od(!1);
       for (const { pc: n } of ee.values())
-        n.connectionState !== "closed" && fe.getTracks().forEach((e) => n.addTrack(e, fe));
+        if (n.connectionState !== "closed")
+          for (const e of fe.getTracks()) {
+            const t = n.getSenders().find((i) => {
+              var s;
+              return ((s = i.track) == null ? void 0 : s.kind) === e.kind;
+            });
+            t ? await t.replaceTrack(e) : n.addTrack(e, fe);
+          }
     } catch {
       ui("system", "Camera/mic access denied");
     }

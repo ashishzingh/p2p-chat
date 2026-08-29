@@ -1327,7 +1327,6 @@ window.addEventListener('resize', () => {
 
 let localStream: MediaStream | null = null
 const localVideo  = document.getElementById('local-video') as HTMLVideoElement
-const remoteVideo = document.getElementById('remote-video') as HTMLVideoElement
 const toggleVideoBtn = document.getElementById('toggle-video') as HTMLButtonElement
 const toggleAudioBtn = document.getElementById('toggle-audio') as HTMLButtonElement
 const pipCamBtn  = document.getElementById('pip-cam-btn') as HTMLButtonElement
@@ -1358,10 +1357,13 @@ async function toggleCamera() {
             localVideo.srcObject = localStream
             setCamOn(true)
             setMicMuted(false)
-            // Add tracks to every active peer connection
             for (const { pc } of peers.values()) {
-                if (pc.connectionState !== 'closed') {
-                    localStream.getTracks().forEach(t => pc.addTrack(t, localStream!))
+                if (pc.connectionState === 'closed') continue
+                for (const track of localStream.getTracks()) {
+                    // Re-enable path: reuse existing sender to avoid duplicate senders accumulating
+                    const existing = pc.getSenders().find(s => s.track?.kind === track.kind)
+                    if (existing) await existing.replaceTrack(track)
+                    else pc.addTrack(track, localStream!)
                 }
             }
         } catch { appendMessage('system', 'Camera/mic access denied') }
