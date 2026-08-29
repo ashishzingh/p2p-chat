@@ -206,6 +206,17 @@
       </label>
     </div>
 
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Force Relay</div>
+        <div class="toggle-sub">All connections go through TURN only — direct P2P disabled. Turn off to let WebRTC fall back to P2P automatically.</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="f-force-relay" />
+        <span class="slider"></span>
+      </label>
+    </div>
+
     <label>
       Mode <span>static = username/password (managed services) · hmac = shared secret (self-hosted coturn)</span>
       <select id="f-mode">
@@ -287,8 +298,9 @@
   }
 
   function populateForm(cfg) {
-    $('f-enabled').checked  = !!cfg.enabled
-    $('f-mode').value       = cfg.mode        ?? 'static'
+    $('f-enabled').checked      = !!cfg.enabled
+    $('f-force-relay').checked  = !!cfg.forceRelay
+    $('f-mode').value           = cfg.mode        ?? 'static'
     $('f-host').value       = cfg.host        ?? ''
     $('f-udp').value        = cfg.udpPort     ?? 3478
     $('f-tcp').value        = cfg.tcpPort     ?? 3478
@@ -325,6 +337,7 @@
 
     const body = {
       enabled:              $('f-enabled').checked,
+      forceRelay:           $('f-force-relay').checked,
       mode:                 $('f-mode').value,
       host:                 $('f-host').value.trim(),
       udpPort:              parseInt($('f-udp').value) || 3478,

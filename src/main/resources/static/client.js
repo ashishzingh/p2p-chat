@@ -19282,8 +19282,10 @@ const $x = location.protocol === "https:" ? "wss" : "ws", Px = `${$x}://${locati
   iceCheckingStart: 0,
   turnConfigured: !1,
   // set from 'joined' message if server sent turn credentials
-  turnHost: ""
+  turnHost: "",
   // extracted from turn URL for display
+  forceRelay: !1
+  // iceTransportPolicy: 'relay' — set from server config
 };
 function yx() {
   S.localCandidates = [], S.iceState = "new", S.gatheringState = "new", S.dcState = "closed", S.rtt = -1, S.bytesSent = 0, S.bytesReceived = 0, S.pairLocalType = "", S.pairRemoteType = "", S.iceCheckingStart = 0, He();
@@ -19360,7 +19362,12 @@ function He() {
   };
   d("d-host-count", u.host, !1), d("d-srflx-count", u.srflx, !0), d("d-relay-count", u.relay, S.turnConfigured);
   const m = document.getElementById("d-relay-hint");
-  m && (S.turnConfigured ? S.pairLocalType === "relay" ? m.textContent = `Relaying via ${S.turnHost} — TURN active` : u.relay > 0 ? m.textContent = `TURN (${S.turnHost}) ready — ${u.relay} relay candidate${u.relay > 1 ? "s" : ""} gathered` : m.textContent = `TURN configured (${S.turnHost}) — gathering...` : m.textContent = "No TURN server configured — direct P2P only");
+  if (m)
+    if (S.turnConfigured) {
+      const X = S.forceRelay ? " · FORCE RELAY ON" : "";
+      S.pairLocalType === "relay" ? m.textContent = `Relaying via ${S.turnHost} — TURN active${X}` : u.relay > 0 ? m.textContent = `TURN (${S.turnHost}) ready — ${u.relay} relay candidate${u.relay > 1 ? "s" : ""} gathered${X}` : m.textContent = `TURN configured (${S.turnHost}) — gathering...${X}`;
+    } else
+      m.textContent = "No TURN server configured — direct P2P only";
   const g = document.getElementById("d-turn-dot"), Q = document.getElementById("d-turn-val");
   g && Q && (S.turnConfigured ? S.pairLocalType === "relay" ? (g.className = "health-dot ok", Q.textContent = `Active — routing via ${S.turnHost}`) : u.relay > 0 ? (g.className = "health-dot ok", Q.textContent = `Standby — ${S.turnHost} reachable`) : S.iceState === "failed" ? (g.className = "health-dot error", Q.textContent = `Unreachable — ${S.turnHost} did not respond`) : (g.className = "health-dot warn", Q.textContent = `Configured (${S.turnHost}) — waiting for ICE`) : (g.className = "health-dot", Q.textContent = "Not configured")), document.getElementById("d-rtt").textContent = S.rtt >= 0 ? `${S.rtt} ms` : "—", document.getElementById("d-sent").textContent = S.bytesSent > 0 ? or(S.bytesSent) : "—", document.getElementById("d-recv").textContent = S.bytesReceived > 0 ? or(S.bytesReceived) : "—", document.getElementById("d-gathering").textContent = S.gatheringState;
   const x = S.pairLocalType && S.pairRemoteType ? `${S.pairLocalType} ↔ ${S.pairRemoteType}` : "—";
@@ -20125,7 +20132,8 @@ function md() {
       if (e.type === "joined") {
         if ((t = e.turn) != null && t.urls) {
           const i = e.turn.urls[0].match(/turn:([^:?/]+)/);
-          S.turnConfigured = !0, S.turnHost = i ? i[1] : "configured", dO = {
+          S.turnConfigured = !0, S.turnHost = i ? i[1] : "configured", S.forceRelay = !!e.turn.forceRelay, dO = {
+            iceTransportPolicy: e.turn.forceRelay ? "relay" : "all",
             iceServers: [
               { urls: "stun:stun.l.google.com:19302" },
               { urls: "stun:stun1.l.google.com:19302" },

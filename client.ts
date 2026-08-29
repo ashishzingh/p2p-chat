@@ -100,6 +100,7 @@ const diagState = {
     iceCheckingStart: 0,
     turnConfigured:  false,   // set from 'joined' message if server sent turn credentials
     turnHost:        '',      // extracted from turn URL for display
+    forceRelay:      false,   // iceTransportPolicy: 'relay' — set from server config
 }
 
 function resetDiagState() {
@@ -220,12 +221,13 @@ function updateDiagnosticsUI() {
     const relayHint = document.getElementById('d-relay-hint')
     if (relayHint) {
         if (diagState.turnConfigured) {
+            const forceTag = diagState.forceRelay ? ' · FORCE RELAY ON' : ''
             if (diagState.pairLocalType === 'relay')
-                relayHint.textContent = `Relaying via ${diagState.turnHost} — TURN active`
+                relayHint.textContent = `Relaying via ${diagState.turnHost} — TURN active${forceTag}`
             else if (counts.relay > 0)
-                relayHint.textContent = `TURN (${diagState.turnHost}) ready — ${counts.relay} relay candidate${counts.relay > 1 ? 's' : ''} gathered`
+                relayHint.textContent = `TURN (${diagState.turnHost}) ready — ${counts.relay} relay candidate${counts.relay > 1 ? 's' : ''} gathered${forceTag}`
             else
-                relayHint.textContent = `TURN configured (${diagState.turnHost}) — gathering...`
+                relayHint.textContent = `TURN configured (${diagState.turnHost}) — gathering...${forceTag}`
         } else {
             relayHint.textContent = 'No TURN server configured — direct P2P only'
         }
@@ -1531,11 +1533,12 @@ function connect() {
 
         if (msg.type === 'joined') {
             if (msg.turn?.urls) {
-                // extract hostname from first URL e.g. "turn:relay1.expressturn.com:3478?transport=udp"
                 const hostMatch = (msg.turn.urls[0] as string).match(/turn:([^:?/]+)/)
                 diagState.turnConfigured = true
                 diagState.turnHost       = hostMatch ? hostMatch[1] : 'configured'
+                diagState.forceRelay     = !!msg.turn.forceRelay
                 rtcConfig = {
+                    iceTransportPolicy: msg.turn.forceRelay ? 'relay' : 'all',
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
                         { urls: 'stun:stun1.l.google.com:19302' },
