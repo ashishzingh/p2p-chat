@@ -19611,38 +19611,53 @@ document.getElementById("download-code-btn").addEventListener("click", () => {
   const n = xe.state.doc.toString(), e = Cx[Dt] ?? "txt", t = new Blob([n], { type: "text/plain" }), i = URL.createObjectURL(t), s = document.createElement("a");
   s.href = i, s.download = `solution.${e}`, s.click(), URL.revokeObjectURL(i);
 });
-document.getElementById("format-btn").addEventListener("click", async () => {
-  if (Dt !== "js") {
-    const n = document.getElementById("format-btn"), e = n.textContent;
-    n.textContent = "JS only", setTimeout(() => {
-      n.textContent = e;
-    }, 1500);
-    return;
-  }
-  try {
-    const n = await import("https://esm.sh/prettier@3/standalone"), e = await import("https://esm.sh/prettier@3/plugins/babel"), t = await import("https://esm.sh/prettier@3/plugins/estree"), i = xe.state.doc.toString(), s = await n.format(i, {
+async function Wx(n, e) {
+  if (e === "js") {
+    const r = await import("https://esm.sh/prettier@3/standalone"), o = await import("https://esm.sh/prettier@3/plugins/babel"), O = await import("https://esm.sh/prettier@3/plugins/estree");
+    return r.format(n, {
       parser: "babel",
-      plugins: [e, t],
+      plugins: [o, O],
       printWidth: 100,
       tabWidth: 4,
       semi: !0,
       singleQuote: !0
-    }), r = xe.state.selection;
+    });
+  }
+  if (e === "java") {
+    const r = await import("https://esm.sh/prettier@3/standalone"), o = await import("https://esm.sh/prettier-plugin-java@2");
+    return r.format(n, {
+      parser: "java",
+      plugins: [o],
+      printWidth: 100,
+      tabWidth: 4
+    });
+  }
+  const t = e === "c" ? "file.c" : "file.cpp", i = await import("https://esm.sh/@wasm-fmt/clang-format");
+  await i.default();
+  const s = JSON.stringify({ BasedOnStyle: "Google", IndentWidth: 4, ColumnLimit: 100 });
+  return i.format(n, t, s);
+}
+document.getElementById("format-btn").addEventListener("click", async () => {
+  const n = document.getElementById("format-btn"), e = n.textContent;
+  n.textContent = "⏳…", n.disabled = !0;
+  try {
+    const t = xe.state.doc.toString(), i = await Wx(t, Dt), s = xe.state.selection;
     xe.dispatch({
-      changes: { from: 0, to: xe.state.doc.length, insert: s },
-      selection: { anchor: Math.min(r.main.anchor, s.length) }
-    }), me({ source: "code", content: s, lang: Dt });
+      changes: { from: 0, to: xe.state.doc.length, insert: i },
+      selection: { anchor: Math.min(s.main.anchor, i.length) }
+    }), me({ source: "code", content: i, lang: Dt }), n.textContent = "✓ Done", setTimeout(() => {
+      n.textContent = e, n.disabled = !1;
+    }, 1200);
   } catch {
-    const e = document.getElementById("format-btn"), t = e.textContent;
-    e.textContent = "✕ Error", setTimeout(() => {
-      e.textContent = t;
+    n.textContent = "✕ Error", setTimeout(() => {
+      n.textContent = e, n.disabled = !1;
     }, 2e3);
   }
 });
-const Wx = document.getElementById("code-output-wrap"), Ot = document.getElementById("resize-handle"), at = document.getElementById("output-section");
+const jx = document.getElementById("code-output-wrap"), Ot = document.getElementById("resize-handle"), at = document.getElementById("output-section");
 let Vt = !1;
 document.getElementById("orient-btn").addEventListener("click", () => {
-  Vt = !Vt, Wx.classList.toggle("horizontal", Vt);
+  Vt = !Vt, jx.classList.toggle("horizontal", Vt);
   const n = document.getElementById("orient-btn");
   n.textContent = Vt ? "↕ Layout" : "⇄ Layout";
 });
@@ -19697,7 +19712,7 @@ ai.addEventListener("input", () => {
     me({ source: "problem", content: ai.value });
   }, 250));
 });
-function jx(n) {
+function Ax(n) {
   QO = !0;
   const e = ai.selectionStart;
   ai.value = n;
@@ -19738,7 +19753,7 @@ ${e instanceof Error ? e.message : String(e)}`;
     }
   Ht.classList.remove("running"), Ht.textContent = "▶ Run", Ht.disabled = !1;
 });
-const re = document.getElementById("whiteboard"), U = re.getContext("2d"), Ax = document.getElementById("whiteboard-wrap");
+const re = document.getElementById("whiteboard"), U = re.getContext("2d"), Ex = document.getElementById("whiteboard-wrap");
 let ae = "pen", zt = 2.5, wi = !1, Fe = Qx, hr = !1, qi = 0, Vi = 0, qn = 0, Vn = 0, Yr = !1, ze = [], mt = [], ni = null;
 document.addEventListener("keydown", (n) => {
   n.key === "Shift" && (Yr = !0);
@@ -19885,7 +19900,7 @@ re.addEventListener("click", (n) => {
     "padding:2px 5px",
     "z-index:20",
     "overflow:hidden"
-  ].join(";"), Ax.appendChild(t), t.focus();
+  ].join(";"), Ex.appendChild(t), t.focus();
   const i = () => {
     const s = t.value.trim();
     if (t.remove(), !s) return;
@@ -19918,7 +19933,7 @@ document.getElementById("redo-btn").addEventListener("click", hd);
 document.addEventListener("keydown", (n) => {
   document.querySelector("#tab-diagram.active") && ((n.ctrlKey || n.metaKey) && n.key === "z" && !n.shiftKey && (n.preventDefault(), ld()), (n.ctrlKey || n.metaKey) && (n.key === "y" || n.key === "z" && n.shiftKey) && (n.preventDefault(), hd()));
 });
-const Ex = {
+const Mx = {
   pen: "crosshair",
   eraser: "cell",
   line: "crosshair",
@@ -19928,7 +19943,7 @@ const Ex = {
   text: "text"
 };
 function Xa(n) {
-  ae = n, re.style.cursor = Ex[n], ["pen", "eraser", "line", "rect", "ellipse", "arrow", "text"].forEach((e) => {
+  ae = n, re.style.cursor = Mx[n], ["pen", "eraser", "line", "rect", "ellipse", "arrow", "text"].forEach((e) => {
     var t;
     return (t = document.getElementById(`tool-${e}`)) == null ? void 0 : t.classList.toggle("active", e === n);
   });
@@ -19962,7 +19977,7 @@ document.getElementById("save-canvas-btn").addEventListener("click", () => {
   const n = re.toDataURL("image/png"), e = document.createElement("a");
   e.href = n, e.download = "whiteboard.png", e.click();
 });
-function Mx(n) {
+function Gx(n) {
   switch (n.op) {
     case "line":
       rd(n.x1, n.y1, n.x2, n.y2, Uh, n.erasing, n.width);
@@ -20028,7 +20043,7 @@ const Us = [];
 function me(n) {
   (Xt == null ? void 0 : Xt.readyState) === "open" && Xt.send(JSON.stringify(n));
 }
-function Gx(n) {
+function Lx(n) {
   const e = JSON.parse(n);
   if (e.source === "hello") {
     Fu = e.name, bx.textContent = e.name;
@@ -20039,15 +20054,15 @@ function Gx(n) {
   if (e.source === "chat") return ui("peer", e.text);
   if (e.source === "code") return _x(e.content, e.lang);
   if (e.source === "code-output") return vs(e.output, e.output.startsWith("ERROR"), e.output.startsWith("⚠️"));
-  if (e.source === "diagram") return Mx(e);
-  if (e.source === "problem") return jx(e.content);
+  if (e.source === "diagram") return Gx(e);
+  if (e.source === "problem") return Ax(e.content);
 }
 function dd(n) {
   Xt = n, n.onopen = () => {
     _i("Connected", "connected"), Yn.disabled = !1, Qa.disabled = !1, me({ source: "hello", name: $a }), ai.value && me({ source: "problem", content: ai.value }), ui("system", "Connected to peer"), S.dcState = "open", He();
   }, n.onclose = () => {
     _i("Peer disconnected", "waiting"), S.dcState = "closed", Nu(), He();
-  }, n.onmessage = (e) => Gx(e.data);
+  }, n.onmessage = (e) => Lx(e.data);
 }
 const zh = {
   iceServers: [
@@ -20081,7 +20096,7 @@ function pd() {
       }
   }, fe && fe.getTracks().forEach((n) => _.addTrack(n, fe)), _;
 }
-async function Lx() {
+async function Dx() {
   Di = !0, pd();
   const n = _.createDataChannel("main");
   dd(n);
@@ -20120,7 +20135,7 @@ function md() {
             ]
           }, He();
         }
-        e.peers > 0 ? await Lx() : go();
+        e.peers > 0 ? await Dx() : go();
         return;
       }
       if (e.type === "peer-joined") {
@@ -20165,7 +20180,7 @@ Yn.addEventListener("keydown", (n) => {
   n.key === "Enter" && gd();
 });
 const ba = document.getElementById("chat-drawer"), ya = document.getElementById("chat-backdrop");
-function Dx() {
+function Ix() {
   var n;
   ba.classList.add("open"), ya.classList.add("visible"), (n = document.getElementById("chat-notif")) == null || n.classList.remove("show"), yi.scrollTop = yi.scrollHeight;
 }
@@ -20173,7 +20188,7 @@ function wa() {
   ba.classList.remove("open"), ya.classList.remove("visible");
 }
 document.getElementById("chat-toggle-btn").addEventListener("click", () => {
-  ba.classList.contains("open") ? wa() : Dx();
+  ba.classList.contains("open") ? wa() : Ix();
 });
 document.getElementById("close-chat-btn").addEventListener("click", wa);
 ya.addEventListener("click", wa);

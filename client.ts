@@ -699,22 +699,12 @@ document.getElementById('download-code-btn')!.addEventListener('click', () => {
 
 // ── Format code ──────────────────────────────────────────────────────────────
 
-document.getElementById('format-btn')!.addEventListener('click', async () => {
-    if (currentLang !== 'js') {
-        const btn = document.getElementById('format-btn')!
-        const orig = btn.textContent!
-        btn.textContent = 'JS only'
-        setTimeout(() => { btn.textContent = orig }, 1500)
-        return
-    }
-    try {
-        // Use the browser's built-in JS evaluation to reformat via Function toString trick
-        // Lightweight approach: use prettier loaded from CDN via dynamic import
-        const prettier   = await import('https://esm.sh/prettier@3/standalone' as string)
+async function formatCode(code: string, lang: string): Promise<string> {
+    if (lang === 'js') {
+        const prettier    = await import('https://esm.sh/prettier@3/standalone' as string)
         const parserBabel = await import('https://esm.sh/prettier@3/plugins/babel' as string)
         const parserEstree = await import('https://esm.sh/prettier@3/plugins/estree' as string)
-        const code = editor.state.doc.toString()
-        const formatted = await (prettier as any).format(code, {
+        return (prettier as any).format(code, {
             parser: 'babel',
             plugins: [parserBabel, parserEstree],
             printWidth: 100,
@@ -722,17 +712,46 @@ document.getElementById('format-btn')!.addEventListener('click', async () => {
             semi: true,
             singleQuote: true,
         })
+    }
+
+    if (lang === 'java') {
+        const prettier     = await import('https://esm.sh/prettier@3/standalone' as string)
+        const pluginJava   = await import('https://esm.sh/prettier-plugin-java@2' as string)
+        return (prettier as any).format(code, {
+            parser: 'java',
+            plugins: [pluginJava],
+            printWidth: 100,
+            tabWidth: 4,
+        })
+    }
+
+    // C and C++ — clang-format WASM
+    const filename = lang === 'c' ? 'file.c' : 'file.cpp'
+    const mod = await import('https://esm.sh/@wasm-fmt/clang-format' as string)
+    await (mod as any).default()   // initialise WASM (no-op on subsequent calls)
+    const style = JSON.stringify({ BasedOnStyle: 'Google', IndentWidth: 4, ColumnLimit: 100 })
+    return (mod as any).format(code, filename, style)
+}
+
+document.getElementById('format-btn')!.addEventListener('click', async () => {
+    const btn  = document.getElementById('format-btn')!
+    const orig = btn.textContent!
+    btn.textContent = '⏳…'
+    ;(btn as HTMLButtonElement).disabled = true
+    try {
+        const code      = editor.state.doc.toString()
+        const formatted = await formatCode(code, currentLang)
         const sel = editor.state.selection
         editor.dispatch({
             changes: { from: 0, to: editor.state.doc.length, insert: formatted },
             selection: { anchor: Math.min(sel.main.anchor, formatted.length) },
         })
         sendData({ source: 'code', content: formatted, lang: currentLang })
-    } catch (e) {
-        const btn = document.getElementById('format-btn')!
-        const orig = btn.textContent!
+        btn.textContent = '✓ Done'
+        setTimeout(() => { btn.textContent = orig; (btn as HTMLButtonElement).disabled = false }, 1200)
+    } catch {
         btn.textContent = '✕ Error'
-        setTimeout(() => { btn.textContent = orig }, 2000)
+        setTimeout(() => { btn.textContent = orig; (btn as HTMLButtonElement).disabled = false }, 2000)
     }
 })
 
