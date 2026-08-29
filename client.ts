@@ -701,8 +701,8 @@ document.getElementById('download-code-btn')!.addEventListener('click', () => {
 
 async function formatCode(code: string, lang: string): Promise<string> {
     if (lang === 'js') {
-        const prettier    = await import('https://esm.sh/prettier@3/standalone' as string)
-        const parserBabel = await import('https://esm.sh/prettier@3/plugins/babel' as string)
+        const prettier     = await import('https://esm.sh/prettier@3/standalone' as string)
+        const parserBabel  = await import('https://esm.sh/prettier@3/plugins/babel' as string)
         const parserEstree = await import('https://esm.sh/prettier@3/plugins/estree' as string)
         return (prettier as any).format(code, {
             parser: 'babel',
@@ -715,21 +715,24 @@ async function formatCode(code: string, lang: string): Promise<string> {
     }
 
     if (lang === 'java') {
-        const prettier     = await import('https://esm.sh/prettier@3/standalone' as string)
-        const pluginJava   = await import('https://esm.sh/prettier-plugin-java@2' as string)
+        const prettier   = await import('https://esm.sh/prettier@3/standalone' as string)
+        const pluginJava = await import('https://esm.sh/prettier-plugin-java@2' as string)
+        // esm.sh wraps CJS modules — the actual plugin object is on .default
+        const plugin = (pluginJava as any).default ?? pluginJava
         return (prettier as any).format(code, {
             parser: 'java',
-            plugins: [pluginJava],
+            plugins: [plugin],
             printWidth: 100,
             tabWidth: 4,
         })
     }
 
-    // C and C++ — clang-format WASM
+    // C and C++ — clang-format compiled to WASM
     const filename = lang === 'c' ? 'file.c' : 'file.cpp'
     const mod = await import('https://esm.sh/@wasm-fmt/clang-format' as string)
-    await (mod as any).default()   // initialise WASM (no-op on subsequent calls)
-    const style = JSON.stringify({ BasedOnStyle: 'Google', IndentWidth: 4, ColumnLimit: 100 })
+    await (mod as any).default()   // initialise WASM — no-op on subsequent calls
+    // style must be .clang-format YAML content, not JSON
+    const style = 'BasedOnStyle: Google\nIndentWidth: 4\nColumnLimit: 100\n'
     return (mod as any).format(code, filename, style)
 }
 

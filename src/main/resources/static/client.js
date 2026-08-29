@@ -19624,18 +19624,19 @@ async function Wx(n, e) {
     });
   }
   if (e === "java") {
-    const r = await import("https://esm.sh/prettier@3/standalone"), o = await import("https://esm.sh/prettier-plugin-java@2");
+    const r = await import("https://esm.sh/prettier@3/standalone"), o = await import("https://esm.sh/prettier-plugin-java@2"), O = o.default ?? o;
     return r.format(n, {
       parser: "java",
-      plugins: [o],
+      plugins: [O],
       printWidth: 100,
       tabWidth: 4
     });
   }
   const t = e === "c" ? "file.c" : "file.cpp", i = await import("https://esm.sh/@wasm-fmt/clang-format");
-  await i.default();
-  const s = JSON.stringify({ BasedOnStyle: "Google", IndentWidth: 4, ColumnLimit: 100 });
-  return i.format(n, t, s);
+  return await i.default(), i.format(n, t, `BasedOnStyle: Google
+IndentWidth: 4
+ColumnLimit: 100
+`);
 }
 document.getElementById("format-btn").addEventListener("click", async () => {
   const n = document.getElementById("format-btn"), e = n.textContent;
