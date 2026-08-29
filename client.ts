@@ -110,6 +110,7 @@ type DataMsg =
     | { source: 'diagram'; op: 'clear' }
     | { source: 'mic-state'; muted: boolean }
     | { source: 'chat-sync'; history: Array<{ who: string; text: string }> }
+    | { source: 'timer-sync'; elapsed: number; running: boolean; startedAt: number }
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
@@ -623,6 +624,64 @@ function showToast(who: string, text: string) {
 
 msgToast.addEventListener('click', () => { hideToast(); openChatDrawer() })
 document.getElementById('toast-close')!.addEventListener('click', e => { e.stopPropagation(); hideToast() })
+
+// ── Interview timer ───────────────────────────────────────────────────────────
+
+let timerElapsed   = 0
+let timerRunning   = false
+let timerStartedAt = 0
+let timerInterval: ReturnType<typeof setInterval> | null = null
+
+function timerTick() {
+    const total = timerRunning
+        ? timerElapsed + (Date.now() - timerStartedAt)
+        : timerElapsed
+    const s = Math.floor(total / 1000)
+    const m = Math.floor(s / 60)
+    document.getElementById('timer-display')!.textContent =
+        `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
+function applyTimerState(elapsed: number, running: boolean, startedAt: number) {
+    timerElapsed   = elapsed
+    timerRunning   = running
+    timerStartedAt = startedAt
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null }
+    if (running) timerInterval = setInterval(timerTick, 500)
+    timerTick()
+    document.getElementById('timer-toggle-btn')!.textContent = running ? '⏸' : '▶'
+    document.getElementById('timer-widget')!.classList.toggle('running', running)
+}
+
+function broadcastTimerState() {
+    sendData({ source: 'timer-sync', elapsed: timerElapsed, running: timerRunning, startedAt: timerStartedAt })
+}
+
+document.getElementById('timer-toggle-btn')!.addEventListener('click', () => {
+    const now = Date.now()
+    if (timerRunning)
+        applyTimerState(timerElapsed + (now - timerStartedAt), false, 0)
+    else
+        applyTimerState(timerElapsed, true, now)
+    broadcastTimerState()
+})
+
+document.getElementById('timer-reset-btn')!.addEventListener('click', () => {
+    applyTimerState(0, false, 0)
+    broadcastTimerState()
+})
+
+// ── Copy invite link ──────────────────────────────────────────────────────────
+
+let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null
+document.getElementById('room-chip')!.addEventListener('click', () => {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+        const chip = document.getElementById('room-chip')!
+        chip.classList.add('copied')
+        if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer)
+        copyFeedbackTimer = setTimeout(() => chip.classList.remove('copied'), 1800)
+    })
+})
 
 function playPing() {
     try {
@@ -1618,6 +1677,10 @@ function handleDataMessage(raw: string, peerId: string) {
         msg.history.forEach(m => appendMessage(m.who, m.text))
         return
     }
+    if (msg.source === 'timer-sync') {
+        applyTimerState(msg.elapsed, msg.running, msg.startedAt)
+        return
+    }
 }
 
 function setupDataChannel(ch: RTCDataChannel, peerId: string) {
@@ -1636,6 +1699,7 @@ function setupDataChannel(ch: RTCDataChannel, peerId: string) {
             if (problemEditor.value) ch.send(JSON.stringify({ source: 'problem', content: problemEditor.value }))
             if (strokes.length > 0) ch.send(JSON.stringify({ source: 'diagram', op: 'full-sync', strokes }))
             if (chatHistory.length > 0) ch.send(JSON.stringify({ source: 'chat-sync', history: chatHistory }))
+            ch.send(JSON.stringify({ source: 'timer-sync', elapsed: timerElapsed, running: timerRunning, startedAt: timerStartedAt }))
         }
         appendMessage('system', `${state?.name || 'Peer'} connected`)
         diagState.dcState = 'open'
