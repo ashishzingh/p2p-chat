@@ -1234,8 +1234,23 @@ function setupDataChannel(ch: RTCDataChannel) {
     ch.onmessage = e => handleDataMessage(e.data)
 }
 
+const STUN_ONLY: RTCConfiguration = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+    ],
+}
+
 function createPeerConnection() {
-    pc = new RTCPeerConnection(rtcConfig)
+    try {
+        pc = new RTCPeerConnection(rtcConfig)
+    } catch {
+        // TURN config invalid (bad URL) — fall back to STUN only
+        console.warn('RTCPeerConnection failed with TURN config, retrying STUN-only')
+        rtcConfig = STUN_ONLY
+        diagState.turnConfigured = false
+        pc = new RTCPeerConnection(STUN_ONLY)
+    }
 
     pc.onicecandidate = ({ candidate }) => {
         if (candidate) {

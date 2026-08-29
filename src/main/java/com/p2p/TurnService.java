@@ -69,10 +69,13 @@ public class TurnService {
             credential = password;
         }
 
+        String cleanHost = sanitizeHost(host);
+        if (cleanHost.isBlank()) return Optional.empty();
+
         List<String> urls = new ArrayList<>();
-        urls.add("turn:" + host + ":" + udpPort + "?transport=udp");
-        urls.add("turn:" + host + ":" + tcpPort + "?transport=tcp");
-        if (tlsPort > 0) urls.add("turns:" + host + ":" + tlsPort + "?transport=tcp");
+        urls.add("turn:" + cleanHost + ":" + udpPort + "?transport=udp");
+        urls.add("turn:" + cleanHost + ":" + tcpPort + "?transport=tcp");
+        if (tlsPort > 0) urls.add("turns:" + cleanHost + ":" + tlsPort + "?transport=tcp");
 
         Map<String, Object> turn = new LinkedHashMap<>();
         turn.put("urls",       urls);
@@ -116,5 +119,16 @@ public class TurnService {
         if (v instanceof Integer i) return i;
         if (v instanceof Number  n) return n.intValue();
         return Integer.parseInt(v.toString());
+    }
+
+    // Strip any scheme prefix (turn:/turns:/stun:) and trailing :port the user may have included
+    private String sanitizeHost(String raw) {
+        String h = raw.trim();
+        // strip scheme: "turn:host" or "turns://host"
+        h = h.replaceAll("(?i)^(turns?|stuns?)://", "");
+        h = h.replaceAll("(?i)^(turns?|stuns?):", "");
+        // strip trailing :port — a colon followed only by digits at the end
+        h = h.replaceAll(":\\d+$", "");
+        return h.trim();
     }
 }
