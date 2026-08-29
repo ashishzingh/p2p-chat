@@ -715,11 +715,12 @@ async function formatCode(code: string, lang: string): Promise<string> {
     }
 
     if (lang === 'java') {
-        // prettier@2 standalone has stable support for prettier-plugin-java
-        const prettier   = await import('https://esm.sh/prettier@2/standalone' as string)
-        const pluginJava = await import('https://esm.sh/prettier-plugin-java@2' as string)
-        const plugin = (pluginJava as any).default ?? pluginJava
-        return (prettier as any).format(code, {
+        // prettier@2 standalone + prettier-plugin-java (esm.sh wraps CJS → .default has the API)
+        const prettierMod = await import('https://esm.sh/prettier@2/standalone' as string)
+        const pluginJava  = await import('https://esm.sh/prettier-plugin-java@2' as string)
+        const prettier = (prettierMod as any).default ?? prettierMod
+        const plugin   = (pluginJava  as any).default ?? pluginJava
+        return prettier.format(code, {
             parser: 'java',
             plugins: [plugin],
             printWidth: 100,
@@ -727,16 +728,11 @@ async function formatCode(code: string, lang: string): Promise<string> {
         })
     }
 
-    // C and C++ — clang-format compiled to WASM
+    // C and C++ — clang-format bundled locally via the vite-specific entry
     const filename = lang === 'c' ? 'file.c' : 'file.cpp'
-    const mod = await import('https://esm.sh/@wasm-fmt/clang-format' as string) as any
-    // esm.sh may present the default export as init fn or nest everything under .default
-    const init = typeof mod.default === 'function' ? mod.default : mod.default?.default
-    const fmt  = typeof mod.format  === 'function' ? mod.format  : mod.default?.format
-    if (typeof init !== 'function') throw new Error('clang-format: init() not found')
-    if (typeof fmt  !== 'function') throw new Error('clang-format: format() not found')
-    await init()
-    return fmt(code, filename)
+    const cf = await import('@wasm-fmt/clang-format/vite') as any
+    await cf.default()
+    return cf.format(code, filename)
 }
 
 document.getElementById('format-btn')!.addEventListener('click', async () => {

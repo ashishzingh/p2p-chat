@@ -19612,12 +19612,11 @@ document.getElementById("download-code-btn").addEventListener("click", () => {
   s.href = i, s.download = `solution.${e}`, s.click(), URL.revokeObjectURL(i);
 });
 async function Wx(n, e) {
-  var o, O;
   if (e === "js") {
-    const a = await import("https://esm.sh/prettier@3/standalone"), l = await import("https://esm.sh/prettier@3/plugins/babel"), h = await import("https://esm.sh/prettier@3/plugins/estree");
-    return a.format(n, {
+    const s = await import("https://esm.sh/prettier@3/standalone"), r = await import("https://esm.sh/prettier@3/plugins/babel"), o = await import("https://esm.sh/prettier@3/plugins/estree");
+    return s.format(n, {
       parser: "babel",
-      plugins: [l, h],
+      plugins: [r, o],
       printWidth: 100,
       tabWidth: 4,
       semi: !0,
@@ -19625,18 +19624,16 @@ async function Wx(n, e) {
     });
   }
   if (e === "java") {
-    const a = await import("https://esm.sh/prettier@2/standalone"), l = await import("https://esm.sh/prettier-plugin-java@2"), h = l.default ?? l;
-    return a.format(n, {
+    const s = await import("https://esm.sh/prettier@2/standalone"), r = await import("https://esm.sh/prettier-plugin-java@2"), o = s.default ?? s, O = r.default ?? r;
+    return o.format(n, {
       parser: "java",
-      plugins: [h],
+      plugins: [O],
       printWidth: 100,
       tabWidth: 4
     });
   }
-  const t = e === "c" ? "file.c" : "file.cpp", i = await import("https://esm.sh/@wasm-fmt/clang-format"), s = typeof i.default == "function" ? i.default : (o = i.default) == null ? void 0 : o.default, r = typeof i.format == "function" ? i.format : (O = i.default) == null ? void 0 : O.format;
-  if (typeof s != "function") throw new Error("clang-format: init() not found");
-  if (typeof r != "function") throw new Error("clang-format: format() not found");
-  return await s(), r(n, t);
+  const t = e === "c" ? "file.c" : "file.cpp", i = await import("./clang-format-vite-A5EoXY-R.mjs");
+  return await i.default(), i.format(n, t);
 }
 document.getElementById("format-btn").addEventListener("click", async () => {
   const n = document.getElementById("format-btn"), e = n.textContent;
