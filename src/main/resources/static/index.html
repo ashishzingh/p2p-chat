@@ -704,6 +704,20 @@
             text-shadow: 0 1px 3px rgba(0,0,0,.9);
         }
 
+        .pip-mute-badge {
+            position: absolute;
+            top: 5px; right: 5px;
+            font-size: .6rem;
+            line-height: 1;
+            background: rgba(220,38,38,.82);
+            border-radius: 99px;
+            padding: 2px 4px;
+            display: none;
+            pointer-events: none;
+            box-shadow: 0 1px 4px rgba(0,0,0,.4);
+        }
+        .pip-tile.peer-muted .pip-mute-badge { display: block; }
+
         /* ── PIP in-frame controls (local tile only) ── */
         .pip-tile-controls {
             position: absolute;

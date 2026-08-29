@@ -74,6 +74,7 @@ type DataMsg =
     | { source: 'diagram'; op: 'undo' }
     | { source: 'diagram'; op: 'redo' }
     | { source: 'diagram'; op: 'clear' }
+    | { source: 'mic-state'; muted: boolean }
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
@@ -1326,6 +1327,7 @@ window.addEventListener('resize', () => {
 // ── Video ─────────────────────────────────────────────────────────────────────
 
 let localStream: MediaStream | null = null
+let micMuted = false
 const localVideo  = document.getElementById('local-video') as HTMLVideoElement
 const toggleVideoBtn = document.getElementById('toggle-video') as HTMLButtonElement
 const toggleAudioBtn = document.getElementById('toggle-audio') as HTMLButtonElement
@@ -1344,6 +1346,7 @@ function setCamOn(on: boolean) {
 }
 
 function setMicMuted(muted: boolean) {
+    micMuted = muted
     toggleAudioBtn.textContent = muted ? '🔇' : '🎤'
     toggleAudioBtn.classList.toggle('active', muted)
     pipMicBtn.textContent = muted ? '🔇' : '🎤'
@@ -1380,6 +1383,7 @@ function toggleMic() {
     const enabled = localStream.getAudioTracks().some(t => t.enabled)
     localStream.getAudioTracks().forEach(t => { t.enabled = !enabled })
     setMicMuted(enabled) // if was enabled, now muted
+    sendData({ source: 'mic-state', muted: enabled })
 }
 
 toggleVideoBtn.addEventListener('click', toggleCamera)
@@ -1439,6 +1443,10 @@ function handleDataMessage(raw: string, peerId: string) {
     if (msg.source === 'code-output') return showOutput(msg.output, msg.output.startsWith('ERROR'), msg.output.startsWith('⚠️'))
     if (msg.source === 'diagram')     return applyRemoteDiagram(msg)
     if (msg.source === 'problem')     return applyRemoteProblem(msg.content)
+    if (msg.source === 'mic-state') {
+        document.getElementById(`pip-tile-${peerId}`)?.classList.toggle('peer-muted', msg.muted)
+        return
+    }
 }
 
 function setupDataChannel(ch: RTCDataChannel, peerId: string) {
@@ -1450,6 +1458,7 @@ function setupDataChannel(ch: RTCDataChannel, peerId: string) {
         sendBtn.disabled  = false
         setStatus('Connected', 'connected')
         ch.send(JSON.stringify({ source: 'hello', name: myName }))
+        ch.send(JSON.stringify({ source: 'mic-state', muted: micMuted }))
         if (state?.isExisting) {
             // Sync current room state to the newly joined peer
             ch.send(JSON.stringify({ source: 'code', content: editor.state.doc.toString(), lang: currentLang }))
@@ -1492,6 +1501,11 @@ function createPeerTile(peerId: string): { tileEl: HTMLDivElement; videoEl: HTML
     avatar.textContent = 'P'
     noCam.appendChild(avatar)
     tileEl.appendChild(noCam)
+
+    const muteBadge = document.createElement('div')
+    muteBadge.className = 'pip-mute-badge'
+    muteBadge.textContent = '🔇'
+    tileEl.appendChild(muteBadge)
 
     const nameBar = document.createElement('div')
     nameBar.className = 'pip-name-bar'
