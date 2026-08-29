@@ -697,6 +697,133 @@ document.getElementById('download-code-btn')!.addEventListener('click', () => {
     URL.revokeObjectURL(url)
 })
 
+// ── Format code ──────────────────────────────────────────────────────────────
+
+document.getElementById('format-btn')!.addEventListener('click', async () => {
+    if (currentLang !== 'js') {
+        const btn = document.getElementById('format-btn')!
+        const orig = btn.textContent!
+        btn.textContent = 'JS only'
+        setTimeout(() => { btn.textContent = orig }, 1500)
+        return
+    }
+    try {
+        // Use the browser's built-in JS evaluation to reformat via Function toString trick
+        // Lightweight approach: use prettier loaded from CDN via dynamic import
+        const prettier   = await import('https://esm.sh/prettier@3/standalone' as string)
+        const parserBabel = await import('https://esm.sh/prettier@3/plugins/babel' as string)
+        const parserEstree = await import('https://esm.sh/prettier@3/plugins/estree' as string)
+        const code = editor.state.doc.toString()
+        const formatted = await (prettier as any).format(code, {
+            parser: 'babel',
+            plugins: [parserBabel, parserEstree],
+            printWidth: 100,
+            tabWidth: 4,
+            semi: true,
+            singleQuote: true,
+        })
+        const sel = editor.state.selection
+        editor.dispatch({
+            changes: { from: 0, to: editor.state.doc.length, insert: formatted },
+            selection: { anchor: Math.min(sel.main.anchor, formatted.length) },
+        })
+        sendData({ source: 'code', content: formatted, lang: currentLang })
+    } catch (e) {
+        const btn = document.getElementById('format-btn')!
+        const orig = btn.textContent!
+        btn.textContent = '✕ Error'
+        setTimeout(() => { btn.textContent = orig }, 2000)
+    }
+})
+
+// ── Layout orientation + resizable output ─────────────────────────────────────
+
+const codeOutputWrap = document.getElementById('code-output-wrap')!
+const resizeHandle   = document.getElementById('resize-handle')!
+const outputSection  = document.getElementById('output-section') as HTMLElement
+
+let isHorizontal = false
+
+document.getElementById('orient-btn')!.addEventListener('click', () => {
+    isHorizontal = !isHorizontal
+    codeOutputWrap.classList.toggle('horizontal', isHorizontal)
+    const btn = document.getElementById('orient-btn')!
+    btn.textContent = isHorizontal ? '↕ Layout' : '⇄ Layout'
+})
+
+// Resize handle — works for both vertical (height) and horizontal (width) modes
+resizeHandle.addEventListener('mousedown', (e: MouseEvent) => {
+    e.preventDefault()
+    resizeHandle.classList.add('dragging')
+    const startX   = e.clientX
+    const startY   = e.clientY
+    const startSize = isHorizontal
+        ? outputSection.offsetWidth
+        : outputSection.offsetHeight
+
+    const onMove = (ev: MouseEvent) => {
+        if (isHorizontal) {
+            const delta = startX - ev.clientX
+            const newW  = Math.max(80, Math.min(startSize + delta, window.innerWidth * 0.7))
+            outputSection.style.width  = `${newW}px`
+            outputSection.style.height = 'auto'
+        } else {
+            const delta = startY - ev.clientY
+            const newH  = Math.max(60, Math.min(startSize + delta, window.innerHeight * 0.7))
+            outputSection.style.height = `${newH}px`
+            outputSection.style.width  = 'auto'
+        }
+    }
+    const onUp = () => {
+        resizeHandle.classList.remove('dragging')
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+})
+
+// Touch support for resize
+resizeHandle.addEventListener('touchstart', (e: TouchEvent) => {
+    e.preventDefault()
+    const t0     = e.touches[0]
+    const startX = t0.clientX
+    const startY = t0.clientY
+    const startSize = isHorizontal ? outputSection.offsetWidth : outputSection.offsetHeight
+
+    const onMove = (ev: TouchEvent) => {
+        const t = ev.touches[0]
+        if (isHorizontal) {
+            const newW = Math.max(80, Math.min(startSize + (startX - t.clientX), window.innerWidth * 0.7))
+            outputSection.style.width = `${newW}px`
+        } else {
+            const newH = Math.max(60, Math.min(startSize + (startY - t.clientY), window.innerHeight * 0.7))
+            outputSection.style.height = `${newH}px`
+        }
+    }
+    const onEnd = () => {
+        resizeHandle.classList.remove('dragging')
+        resizeHandle.removeEventListener('touchmove', onMove)
+        resizeHandle.removeEventListener('touchend', onEnd)
+    }
+    resizeHandle.classList.add('dragging')
+    resizeHandle.addEventListener('touchmove', onMove, { passive: false })
+    resizeHandle.addEventListener('touchend', onEnd)
+}, { passive: false })
+
+// ── Disconnect session ────────────────────────────────────────────────────────
+
+document.getElementById('disconnect-btn')!.addEventListener('click', () => {
+    if (!confirm('Leave this session? You will be taken back to the home screen.')) return
+    if (ws) { try { ws.close() } catch {} }
+    resetPeerState()
+    // Stop all media tracks
+    localStream?.getTracks().forEach(t => t.stop())
+    localStream = null
+    // Navigate back to home
+    location.href = '/'
+})
+
 // ── Problem section toggle + live sync ───────────────────────────────────────
 
 const problemSection = document.getElementById('problem-section')!

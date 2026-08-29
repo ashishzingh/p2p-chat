@@ -393,9 +393,37 @@
         #run-btn.running { animation: runPulse .6s infinite alternate; }
         @keyframes runPulse { from{opacity:.7} to{opacity:1} }
 
+        /* ── Code + Output wrapper ── */
+        #code-output-wrap {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+        #code-output-wrap.horizontal {
+            flex-direction: row;
+        }
+
         #editor { flex: 1; overflow: hidden; min-height: 0; }
         .cm-editor { height: 100%; font-size: 13px; }
         .cm-scroller { overflow: auto !important; }
+
+        /* ── Resize handle ── */
+        #resize-handle {
+            background: var(--bg-3);
+            flex-shrink: 0;
+            cursor: row-resize;
+            transition: background .15s;
+            z-index: 10;
+        }
+        #resize-handle:hover, #resize-handle.dragging { background: var(--accent); }
+        #code-output-wrap:not(.horizontal) #resize-handle {
+            height: 4px; width: 100%; cursor: row-resize;
+        }
+        #code-output-wrap.horizontal #resize-handle {
+            width: 4px; height: 100%; cursor: col-resize;
+        }
 
         /* ── Output ── */
         #output-section {
@@ -405,6 +433,13 @@
             flex-direction: column;
             flex-shrink: 0;
             background: var(--bg-1);
+        }
+        #code-output-wrap.horizontal #output-section {
+            height: auto;
+            width: 340px;
+            min-width: 120px;
+            border-top: none;
+            border-left: 1px solid var(--bg-3);
         }
         #output-header {
             display: flex;
@@ -922,6 +957,7 @@
         <div id="turn-badge"><span class="turn-dot"></span>TURN</div>
     </div>
     <div class="h-right">
+        <button id="disconnect-btn" class="hbtn" title="Leave session">🚪</button>
         <button id="toggle-audio" class="hbtn" title="Mute / Unmute mic" disabled>🎤</button>
         <button id="toggle-video" class="hbtn" title="Camera on / off">📷</button>
         <button id="chat-toggle-btn" class="hbtn" title="Chat">
@@ -970,6 +1006,8 @@
                 <button class="lang-btn" data-lang="cpp">C++</button>
                 <button id="copy-code-btn" class="lang-btn" title="Copy code to clipboard">⎘ Copy</button>
                 <button id="download-code-btn" class="lang-btn" title="Download code file">↓ Save</button>
+                <button id="format-btn" class="lang-btn" title="Format code (JS only)">⌥ Format</button>
+                <button id="orient-btn" class="lang-btn" title="Toggle layout orientation">⇄ Layout</button>
                 <button id="run-btn">▶ Run</button>
             </div>
             <div id="problem-section">
@@ -980,14 +1018,17 @@
                 </div>
                 <textarea id="problem-editor" placeholder="Paste the interview question here…" spellcheck="false"></textarea>
             </div>
-            <div id="editor"></div>
-            <div id="output-section">
-                <div id="output-header">
-                    <span>Output</span>
-                    <span id="output-badge" class="badge info">ready</span>
-                    <button id="clear-output-btn" title="Clear output">✕</button>
+            <div id="code-output-wrap">
+                <div id="editor"></div>
+                <div id="resize-handle"></div>
+                <div id="output-section">
+                    <div id="output-header">
+                        <span>Output</span>
+                        <span id="output-badge" class="badge info">ready</span>
+                        <button id="clear-output-btn" title="Clear output">✕</button>
+                    </div>
+                    <pre id="output-text">// Click ▶ Run to execute JavaScript</pre>
                 </div>
-                <pre id="output-text">// Click ▶ Run to execute JavaScript</pre>
             </div>
         </div>
 
