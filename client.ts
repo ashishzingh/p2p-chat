@@ -1573,9 +1573,14 @@ function connectToPeer(peerId: string, isExisting = false) {
         if (best === 'checking' && !diagState.iceCheckingStart) diagState.iceCheckingStart = Date.now()
         if (best !== 'checking') diagState.iceCheckingStart = 0
         if (best === 'connected' || best === 'completed') {
-            startStatsPolling()
             if (diagState.iceState !== 'connected' && diagState.iceState !== 'completed')
                 track('peer_connected', { path: diagState.pairLocalType || 'unknown', force_relay: diagState.forceRelay })
+            startStatsPolling()
+            pollStats() // immediate update — don't wait for the 2s timer
+        } else {
+            // Clear stale path info so display reflects the actual transitioning state
+            diagState.pairLocalType  = ''
+            diagState.pairRemoteType = ''
         }
         if (best === 'failed') {
             if (diagState.forceRelay)
@@ -1587,6 +1592,8 @@ function connectToPeer(peerId: string, isExisting = false) {
     }
 
     pc.onicegatheringchange = () => {
+        // New gathering round — clear stale candidates so display reflects fresh state
+        if (pc.iceGatheringState === 'gathering') diagState.localCandidates = []
         diagState.gatheringState = pc.iceGatheringState
         updateDiagnosticsUI()
     }
