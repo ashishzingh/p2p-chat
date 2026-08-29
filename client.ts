@@ -16,6 +16,28 @@ function hashRoom(r: string) { let h = 0; for (const c of r) h = (Math.imul(31, 
 
 let joinedAt = 0
 
+// ── Header SVG icons ─────────────────────────────────────────────────────────
+
+const _svg = (paths: string) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`
+
+const SVG = {
+    leave:  _svg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'),
+    micOn:  _svg('<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>'),
+    micOff: _svg('<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="1" y1="1" x2="23" y2="23"/>'),
+    camOn:  _svg('<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>'),
+    camOff: _svg('<line x1="1" y1="1" x2="23" y2="23"/><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34L23 7v10"/>'),
+    chat:   _svg('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+    moon:   _svg('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'),
+}
+
+// Initialize icon spans once DOM is ready
+document.getElementById('leave-icon')!.innerHTML = SVG.leave
+document.getElementById('chat-icon')!.innerHTML  = SVG.chat
+document.getElementById('audio-icon')!.innerHTML = SVG.micOn
+document.getElementById('video-icon')!.innerHTML = SVG.camOff
+document.getElementById('theme-icon')!.innerHTML = SVG.moon
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 let rtcConfig: RTCConfiguration = {
@@ -494,7 +516,7 @@ function applyTheme(name: ThemeName) {
     document.body.classList.remove(...THEME_CLASSES)
     const cls = THEMES[name].cls
     if (cls) document.body.classList.add(cls)
-    themeIconEl.textContent = THEMES[name].icon
+    themeIconEl.innerHTML = SVG.moon
     document.querySelectorAll('.theme-option').forEach(el => {
         const opt = el as HTMLElement
         const isActive = opt.dataset.theme === name
@@ -562,10 +584,43 @@ function appendMessage(who: string, text: string) {
     messages.scrollTop = messages.scrollHeight
     if (who !== 'you' && who !== 'system') {
         const drawer = document.getElementById('chat-drawer')
-        if (drawer && !drawer.classList.contains('open'))
-            document.getElementById('chat-notif')?.classList.add('show')
+        if (drawer && !drawer.classList.contains('open')) {
+            setUnread(unreadCount + 1)
+            showToast(who, text)
+            playPing()
+        }
     }
 }
+
+// ── Unread badge + toast ──────────────────────────────────────────────────────
+
+let unreadCount = 0
+const chatNotifEl = document.getElementById('chat-notif')!
+const msgToast    = document.getElementById('msg-toast')!
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function setUnread(n: number) {
+    unreadCount = n
+    chatNotifEl.textContent = n > 9 ? '9+' : String(n)
+    chatNotifEl.classList.toggle('show', n > 0)
+}
+
+function hideToast() {
+    msgToast.classList.remove('show')
+    if (toastTimer) { clearTimeout(toastTimer); toastTimer = null }
+}
+
+function showToast(who: string, text: string) {
+    document.getElementById('toast-avatar')!.textContent = who.charAt(0).toUpperCase()
+    document.getElementById('toast-who')!.textContent    = who
+    document.getElementById('toast-msg')!.textContent    = text.length > 80 ? text.slice(0, 77) + '…' : text
+    msgToast.classList.add('show')
+    if (toastTimer) clearTimeout(toastTimer)
+    toastTimer = setTimeout(hideToast, 4000)
+}
+
+msgToast.addEventListener('click', () => { hideToast(); openChatDrawer() })
+document.getElementById('toast-close')!.addEventListener('click', e => { e.stopPropagation(); hideToast() })
 
 function playPing() {
     try {
@@ -880,13 +935,48 @@ document.getElementById('disconnect-btn')!.addEventListener('click', () => {
     location.href = '/'
 })
 
+// ── Sidebar resize handle ─────────────────────────────────────────────────────
+
+const sidebarResizeHandle = document.getElementById('sidebar-resize-handle')!
+const sidebarPanel        = document.getElementById('problem-section')!
+
+sidebarResizeHandle.addEventListener('mousedown', (e: MouseEvent) => {
+    e.preventDefault()
+    sidebarResizeHandle.classList.add('dragging')
+    const startX = e.clientX
+    const startW = sidebarPanel.offsetWidth
+
+    const onMove = (ev: MouseEvent) => {
+        const newW = Math.max(180, Math.min(startW + (ev.clientX - startX), 480))
+        sidebarPanel.style.width = `${newW}px`
+    }
+    const onUp = () => {
+        sidebarResizeHandle.classList.remove('dragging')
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+})
+
 // ── Problem section toggle + live sync ───────────────────────────────────────
 
 const problemSection = document.getElementById('problem-section')!
 const problemEditor  = document.getElementById('problem-editor') as HTMLTextAreaElement
+const tabCode        = document.getElementById('tab-code')!
 
-document.getElementById('problem-header')!.addEventListener('click', () => {
-    problemSection.classList.toggle('collapsed')
+function setSidebarCollapsed(collapsed: boolean) {
+    problemSection.classList.toggle('collapsed', collapsed)
+    tabCode.classList.toggle('sidebar-collapsed', collapsed)
+}
+
+document.getElementById('problem-toggle-btn')!.addEventListener('click', (e) => {
+    e.stopPropagation()
+    setSidebarCollapsed(!problemSection.classList.contains('collapsed'))
+})
+
+document.getElementById('sidebar-show-btn')!.addEventListener('click', () => {
+    setSidebarCollapsed(false)
 })
 
 let problemDebounce: ReturnType<typeof setTimeout> | null = null
@@ -908,7 +998,7 @@ function applyRemoteProblem(content: string) {
     try { problemEditor.setSelectionRange(Math.min(pos, content.length), Math.min(pos, content.length)) } catch {}
     applyingRemoteProblem = false
     // expand collapsed problem section so the receiver notices the update
-    problemSection.classList.remove('collapsed')
+    setSidebarCollapsed(false)
 }
 
 runBtn.addEventListener('click', async () => {
@@ -1352,7 +1442,7 @@ const pipCamBtn  = document.getElementById('pip-cam-btn') as HTMLButtonElement
 const pipMicBtn  = document.getElementById('pip-mic-btn') as HTMLButtonElement
 
 function setCamOn(on: boolean) {
-    toggleVideoBtn.textContent = on ? '📹' : '📷'
+    document.getElementById('video-icon')!.innerHTML = on ? SVG.camOn : SVG.camOff
     toggleVideoBtn.classList.toggle('active', on)
     pipCamBtn.textContent = on ? '📹' : '📷'
     pipCamBtn.classList.toggle('off', !on)
@@ -1364,7 +1454,8 @@ function setCamOn(on: boolean) {
 
 function setMicMuted(muted: boolean) {
     micMuted = muted
-    toggleAudioBtn.textContent = muted ? '🔇' : '🎤'
+    document.getElementById('audio-icon')!.innerHTML = muted ? SVG.micOff : SVG.micOn
+    document.getElementById('audio-label')!.textContent = muted ? 'Unmute' : 'Mute'
     toggleAudioBtn.classList.toggle('active', muted)
     pipMicBtn.textContent = muted ? '🔇' : '🎤'
     pipMicBtn.classList.toggle('off', muted)
@@ -1805,7 +1896,8 @@ const chatBackdrop = document.getElementById('chat-backdrop')!
 function openChatDrawer() {
     chatDrawer.classList.add('open')
     chatBackdrop.classList.add('visible')
-    document.getElementById('chat-notif')?.classList.remove('show')
+    setUnread(0)
+    hideToast()
     messages.scrollTop = messages.scrollHeight
 }
 function closeChatDrawer() {
