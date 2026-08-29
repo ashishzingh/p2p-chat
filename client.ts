@@ -5,6 +5,16 @@ import { javascript } from '@codemirror/lang-javascript'
 import { java } from '@codemirror/lang-java'
 import { cpp } from '@codemirror/lang-cpp'
 import { oneDark } from '@codemirror/theme-one-dark'
+import posthog from 'posthog-js'
+
+// ── Analytics ────────────────────────────────────────────────────────────────
+
+const PH_KEY = import.meta.env.VITE_POSTHOG_KEY
+if (PH_KEY) posthog.init(PH_KEY, { api_host: 'https://us.i.posthog.com', autocapture: false, persistence: 'memory' })
+function track(event: string, props?: Record<string, unknown>) { if (PH_KEY) posthog.capture(event, props) }
+function hashRoom(r: string) { let h = 0; for (const c of r) h = (Math.imul(31, h) + c.charCodeAt(0)) | 0; return h.toString(36) }
+
+let joinedAt = 0
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -755,6 +765,7 @@ async function formatCode(code: string, lang: string): Promise<string> {
 
 document.getElementById('format-btn')!.addEventListener('click', async () => {
     const btn  = document.getElementById('format-btn')!
+    track('code_formatted', { lang: currentLang })
     const orig = btn.textContent!
     btn.textContent = '⏳…'
     ;(btn as HTMLButtonElement).disabled = true
@@ -898,6 +909,7 @@ function applyRemoteProblem(content: string) {
 
 runBtn.addEventListener('click', async () => {
     const code = editor.state.doc.toString()
+    track('code_run', { lang: currentLang })
     runBtn.classList.add('running')
     runBtn.textContent = '⏳ Running…'
     runBtn.disabled = true
@@ -1132,6 +1144,7 @@ canvas.addEventListener('mousemove', e => {
 function finishStroke() {
     if (!drawing) return
     drawing = false
+    track('whiteboard_stroke', { tool: currentTool })
     if (currentTool === 'pen' || currentTool === 'eraser') {
         if (!currentStroke) return
         strokes.push(currentStroke)
@@ -1360,6 +1373,7 @@ async function toggleCamera() {
             localVideo.srcObject = localStream
             setCamOn(true)
             setMicMuted(false)
+            track('camera_toggled', { on: true })
             for (const { pc } of peers.values()) {
                 if (pc.connectionState === 'closed') continue
                 for (const track of localStream.getTracks()) {
@@ -1375,6 +1389,7 @@ async function toggleCamera() {
         localStream = null
         localVideo.srcObject = null
         setCamOn(false)
+        track('camera_toggled', { on: false })
     }
 }
 
@@ -1384,6 +1399,7 @@ function toggleMic() {
     localStream.getAudioTracks().forEach(t => { t.enabled = !enabled })
     setMicMuted(enabled) // if was enabled, now muted
     sendData({ source: 'mic-state', muted: enabled })
+    track('mic_toggled', { muted: enabled })
 }
 
 toggleVideoBtn.addEventListener('click', toggleCamera)
@@ -1556,7 +1572,11 @@ function connectToPeer(peerId: string, isExisting = false) {
         diagState.iceState = best
         if (best === 'checking' && !diagState.iceCheckingStart) diagState.iceCheckingStart = Date.now()
         if (best !== 'checking') diagState.iceCheckingStart = 0
-        if (best === 'connected' || best === 'completed') startStatsPolling()
+        if (best === 'connected' || best === 'completed') {
+            startStatsPolling()
+            if (diagState.iceState !== 'connected' && diagState.iceState !== 'completed')
+                track('peer_connected', { path: diagState.pairLocalType || 'unknown', force_relay: diagState.forceRelay })
+        }
         if (best === 'failed') {
             if (diagState.forceRelay)
                 setStatus('TURN relay failed — check server credentials', 'error')
@@ -1657,6 +1677,8 @@ function connect() {
 
         if (msg.type === 'joined') {
             myId = msg.myId as string
+            joinedAt = Date.now()
+            track('room_joined', { room: hashRoom(room), peers_present: (msg.peers as string[]).length, turn: !!msg.turn })
             if (msg.turn?.urls) {
                 const hostMatch = (msg.turn.urls[0] as string).match(/turn:([^:?/]+)/)
                 diagState.turnConfigured = true
@@ -1689,6 +1711,7 @@ function connect() {
         if (msg.type === 'peer-left') {
             const state = peers.get(msg.peerId as string)
             appendMessage('system', `${state?.name || 'Peer'} left the room`)
+            track('peer_left', { session_s: joinedAt ? Math.round((Date.now() - joinedAt) / 1000) : 0 })
             removePeer(msg.peerId as string)
             return
         }
@@ -1752,6 +1775,7 @@ function sendChatMessage() {
     sendData({ source: 'chat', text })
     appendMessage('you', text)
     msgInput.value = ''
+    track('chat_sent')
 }
 
 sendBtn.addEventListener('click', sendChatMessage)
