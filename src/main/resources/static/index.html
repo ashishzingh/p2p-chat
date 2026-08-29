@@ -474,6 +474,49 @@
         #copy-report-btn { width: 100%; padding: 10px; background: var(--bg-2); border: 1px solid var(--bg-3); border-radius: 8px; color: var(--text-0); font-size: .8rem; font-weight: 600; cursor: pointer; transition: background var(--transition); }
         #copy-report-btn:hover { background: var(--bg-3); }
 
+        /* ── Problem statement (inside code tab) ── */
+        #problem-section {
+            border-bottom: 1px solid var(--bg-3);
+            flex-shrink: 0;
+            background: var(--bg-1);
+            overflow: hidden;
+        }
+        #problem-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            cursor: pointer;
+            user-select: none;
+            font-size: .73rem;
+            font-weight: 700;
+            color: var(--text-1);
+            transition: color var(--transition);
+        }
+        #problem-header:hover { color: var(--text-0); }
+        #problem-header .ph-label { display: flex; align-items: center; gap: 5px; }
+        #problem-hint { font-weight: 400; color: var(--text-2); font-size: .65rem; flex: 1; }
+        #problem-toggle-btn {
+            background: none; border: none; color: var(--text-2); cursor: pointer;
+            font-size: .7rem; padding: 2px; line-height: 1;
+            transition: transform .2s;
+        }
+        #problem-section.collapsed #problem-toggle-btn { transform: rotate(-90deg); }
+        #problem-editor {
+            display: block; width: 100%;
+            height: 88px;
+            background: var(--bg-0);
+            color: var(--text-0);
+            border: none; border-top: 1px solid var(--bg-3);
+            outline: none;
+            padding: 9px 12px;
+            font-size: .82rem; line-height: 1.55;
+            resize: none; font-family: inherit;
+            transition: height .18s ease, padding .18s ease;
+        }
+        #problem-section.collapsed #problem-editor { height: 0; padding: 0; overflow: hidden; }
+        #problem-editor::placeholder { color: var(--text-2); }
+
         /* ── Floating PIP ── */
         #pip-container {
             position: fixed;
@@ -583,6 +626,38 @@
             background: linear-gradient(to top, rgba(0,0,0,.72), transparent);
             text-shadow: 0 1px 3px rgba(0,0,0,.9);
         }
+
+        /* ── PIP in-frame controls (local tile only) ── */
+        .pip-tile-controls {
+            position: absolute;
+            bottom: 24px; left: 0; right: 0;
+            display: flex;
+            justify-content: center;
+            gap: 7px;
+            opacity: 0;
+            transition: opacity .2s;
+            pointer-events: none;
+        }
+        #pip-local:hover .pip-tile-controls {
+            opacity: 1;
+            pointer-events: all;
+        }
+        .pip-ctrl-btn {
+            width: 30px; height: 30px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(0,0,0,.65);
+            backdrop-filter: blur(6px);
+            color: #fff;
+            font-size: .82rem;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: background .15s, transform .1s;
+            line-height: 1;
+        }
+        .pip-ctrl-btn:hover:not(:disabled) { background: rgba(0,0,0,.9); transform: scale(1.12); }
+        .pip-ctrl-btn:disabled { opacity: .35; cursor: default; }
+        .pip-ctrl-btn.off { background: rgba(210,30,30,.75); }
 
         /* ── Chat drawer ── */
         #chat-backdrop {
@@ -774,7 +849,8 @@
         <div id="room-chip">room: <span id="room-name"></span></div>
     </div>
     <div class="h-right">
-        <button id="toggle-video" class="hbtn" title="Toggle camera">📷</button>
+        <button id="toggle-audio" class="hbtn" title="Mute / Unmute mic" disabled>🎤</button>
+        <button id="toggle-video" class="hbtn" title="Camera on / off">📷</button>
         <button id="chat-toggle-btn" class="hbtn" title="Chat">
             💬<span class="notif-dot" id="chat-notif"></span>
         </button>
@@ -819,7 +895,17 @@
                 <button class="lang-btn" data-lang="java">Java</button>
                 <button class="lang-btn" data-lang="c">C</button>
                 <button class="lang-btn" data-lang="cpp">C++</button>
+                <button id="copy-code-btn" class="lang-btn" title="Copy code to clipboard">⎘ Copy</button>
+                <button id="download-code-btn" class="lang-btn" title="Download code file">↓ Save</button>
                 <button id="run-btn">▶ Run</button>
+            </div>
+            <div id="problem-section">
+                <div id="problem-header">
+                    <span class="ph-label">📋 Problem</span>
+                    <span id="problem-hint">paste the question here — syncs live to peer</span>
+                    <button id="problem-toggle-btn" title="Collapse">▼</button>
+                </div>
+                <textarea id="problem-editor" placeholder="Paste the interview question here…" spellcheck="false"></textarea>
             </div>
             <div id="editor"></div>
             <div id="output-section">
@@ -852,6 +938,7 @@
                 <div style="display:flex;gap:8px;margin-left:auto;align-items:center">
                     <span class="diagram-legend you">● You</span>
                     <span class="diagram-legend peer">● Peer</span>
+                    <button class="tool-btn" id="save-canvas-btn" title="Export as PNG">↓ PNG</button>
                     <button class="tool-btn" id="clear-canvas">Clear All</button>
                 </div>
             </div>
@@ -935,6 +1022,10 @@
         <div class="pip-tile" id="pip-local">
             <video id="local-video" autoplay muted playsinline></video>
             <div class="pip-no-cam"><div class="pip-avatar" id="local-avatar">?</div></div>
+            <div class="pip-tile-controls">
+                <button class="pip-ctrl-btn" id="pip-cam-btn" title="Camera on/off">📷</button>
+                <button class="pip-ctrl-btn" id="pip-mic-btn" title="Mute/Unmute" disabled>🎤</button>
+            </div>
             <div class="pip-name-bar" id="local-label">You</div>
         </div>
         <div class="pip-tile" id="pip-remote">

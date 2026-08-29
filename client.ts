@@ -613,6 +613,36 @@ clearOutputBtn.addEventListener('click', () => {
     outputBadge.className   = 'badge info'
 })
 
+// ── Code copy / download ──────────────────────────────────────────────────────
+
+const CODE_EXT: Record<string, string> = { js: 'js', java: 'java', c: 'c', cpp: 'cpp' }
+
+document.getElementById('copy-code-btn')!.addEventListener('click', () => {
+    navigator.clipboard.writeText(editor.state.doc.toString()).then(() => {
+        const btn = document.getElementById('copy-code-btn')!
+        const orig = btn.textContent!
+        btn.textContent = '✓ Copied'
+        setTimeout(() => { btn.textContent = orig }, 2000)
+    })
+})
+
+document.getElementById('download-code-btn')!.addEventListener('click', () => {
+    const code = editor.state.doc.toString()
+    const ext  = CODE_EXT[currentLang] ?? 'txt'
+    const blob = new Blob([code], { type: 'text/plain' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url; a.download = `solution.${ext}`; a.click()
+    URL.revokeObjectURL(url)
+})
+
+// ── Problem section toggle ────────────────────────────────────────────────────
+
+const problemSection = document.getElementById('problem-section')!
+document.getElementById('problem-header')!.addEventListener('click', () => {
+    problemSection.classList.toggle('collapsed')
+})
+
 runBtn.addEventListener('click', async () => {
     const code = editor.state.doc.toString()
     runBtn.classList.add('running')
@@ -841,6 +871,12 @@ document.getElementById('clear-canvas')!.addEventListener('click', () => {
     sendData({ source: 'diagram', op: 'clear' })
 })
 
+document.getElementById('save-canvas-btn')!.addEventListener('click', () => {
+    const url = canvas.toDataURL('image/png')
+    const a   = document.createElement('a')
+    a.href = url; a.download = 'whiteboard.png'; a.click()
+})
+
 function applyRemoteDiagram(msg: Extract<DataMsg, { source: 'diagram' }>) {
     switch (msg.op) {
         case 'line':
@@ -885,16 +921,36 @@ window.addEventListener('resize', () => {
 let localStream: MediaStream | null = null
 const localVideo  = document.getElementById('local-video') as HTMLVideoElement
 const remoteVideo = document.getElementById('remote-video') as HTMLVideoElement
-const toggleBtn   = document.getElementById('toggle-video') as HTMLButtonElement
+const toggleVideoBtn = document.getElementById('toggle-video') as HTMLButtonElement
+const toggleAudioBtn = document.getElementById('toggle-audio') as HTMLButtonElement
+const pipCamBtn  = document.getElementById('pip-cam-btn') as HTMLButtonElement
+const pipMicBtn  = document.getElementById('pip-mic-btn') as HTMLButtonElement
 
-toggleBtn.addEventListener('click', async () => {
+function setCamOn(on: boolean) {
+    toggleVideoBtn.textContent = on ? '📹' : '📷'
+    toggleVideoBtn.classList.toggle('active', on)
+    pipCamBtn.textContent = on ? '📹' : '📷'
+    pipCamBtn.classList.toggle('off', !on)
+    document.getElementById('pip-local')!.classList.toggle('cam-on', on)
+    const micEnabled = on
+    toggleAudioBtn.disabled = !micEnabled
+    pipMicBtn.disabled = !micEnabled
+}
+
+function setMicMuted(muted: boolean) {
+    toggleAudioBtn.textContent = muted ? '🔇' : '🎤'
+    toggleAudioBtn.classList.toggle('active', muted)
+    pipMicBtn.textContent = muted ? '🔇' : '🎤'
+    pipMicBtn.classList.toggle('off', muted)
+}
+
+async function toggleCamera() {
     if (!localStream) {
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
             localVideo.srcObject = localStream
-            toggleBtn.textContent = '📹'
-            toggleBtn.classList.add('active')
-            document.getElementById('pip-local')!.classList.add('cam-on')
+            setCamOn(true)
+            setMicMuted(false)
             if (pc && pc.connectionState !== 'closed') {
                 localStream.getTracks().forEach(t => pc!.addTrack(t, localStream!))
             }
@@ -903,11 +959,21 @@ toggleBtn.addEventListener('click', async () => {
         localStream.getTracks().forEach(t => t.stop())
         localStream = null
         localVideo.srcObject = null
-        document.getElementById('pip-local')!.classList.remove('cam-on')
-        toggleBtn.textContent = '📷'
-        toggleBtn.classList.remove('active')
+        setCamOn(false)
     }
-})
+}
+
+function toggleMic() {
+    if (!localStream) return
+    const enabled = localStream.getAudioTracks().some(t => t.enabled)
+    localStream.getAudioTracks().forEach(t => { t.enabled = !enabled })
+    setMicMuted(enabled) // if was enabled, now muted
+}
+
+toggleVideoBtn.addEventListener('click', toggleCamera)
+toggleAudioBtn.addEventListener('click', toggleMic)
+pipCamBtn.addEventListener('click', toggleCamera)
+pipMicBtn.addEventListener('click', toggleMic)
 
 // ── WebRTC ────────────────────────────────────────────────────────────────────
 
