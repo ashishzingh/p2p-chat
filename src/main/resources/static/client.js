@@ -26868,8 +26868,11 @@ $m ? Vd($m) : Yy.style.display = "flex";
 const qy = {
   batman: { icon: "🦇", cls: "batman" },
   superman: { icon: "🦸", cls: "superman" },
-  spiderman: { icon: "🕷️", cls: "spiderman" }
-}, lU = ["light", "batman", "superman", "spiderman"], zd = document.getElementById("theme-picker"), OU = document.getElementById("theme-icon");
+  spiderman: { icon: "🕷️", cls: "spiderman" },
+  nikki: { icon: "👑", cls: "nikki" },
+  espresso: { icon: "☕", cls: "espresso" },
+  astroworld: { icon: "🚀", cls: "astroworld" }
+}, lU = ["light", "batman", "superman", "spiderman", "nikki", "espresso", "astroworld"], zd = document.getElementById("theme-picker"), OU = document.getElementById("theme-icon");
 function Ey(i) {
   document.body.classList.remove(...lU);
   const e = qy[i].cls;

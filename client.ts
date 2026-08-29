@@ -505,12 +505,15 @@ if (initialHash) {
 // ── Theme picker ──────────────────────────────────────────────────────────────
 
 const THEMES = {
-    batman:    { icon: '🦇', cls: 'batman' },
-    superman:  { icon: '🦸', cls: 'superman' },
-    spiderman: { icon: '🕷️', cls: 'spiderman' },
+    batman:     { icon: '🦇', cls: 'batman' },
+    superman:   { icon: '🦸', cls: 'superman' },
+    spiderman:  { icon: '🕷️', cls: 'spiderman' },
+    nikki:      { icon: '👑', cls: 'nikki' },
+    espresso:   { icon: '☕', cls: 'espresso' },
+    astroworld: { icon: '🚀', cls: 'astroworld' },
 } as const
 type ThemeName = keyof typeof THEMES
-const THEME_CLASSES = ['light', 'batman', 'superman', 'spiderman']
+const THEME_CLASSES = ['light', 'batman', 'superman', 'spiderman', 'nikki', 'espresso', 'astroworld']
 
 const themePickerEl = document.getElementById('theme-picker')!
 const themeIconEl   = document.getElementById('theme-icon')!
