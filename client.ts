@@ -144,6 +144,8 @@ function getDiagnosis(): { text: string; cls: 'ok' | 'warn' | 'error' } {
     }
 
     if (ice === 'failed') {
+        if (diagState.forceRelay)
+            return { text: `🔴 Force Relay ON — TURN relay failed.\n${diagState.turnHost} did not establish a relay connection. Likely causes:\n1. Free-tier TURN servers often block actual relay — check your plan\n2. UDP port 3478 may be blocked on this network (TCP may still work)\n3. Wrong credentials — verify username/password in /boss panel\n4. TURN server down or overloaded\nTip: turn off Force Relay in /boss to fall back to direct P2P.`, cls: 'error' }
         if (diagState.turnConfigured && relayCount === 0)
             return { text: `🔴 ICE failed — TURN server unreachable.\n${diagState.turnHost} did not respond or rejected credentials.\nCheck: host/username/password in Railway env vars, firewall rules on the TURN server, UDP port 3478 open.`, cls: 'error' }
         if (srflx === 0)
@@ -226,6 +228,8 @@ function updateDiagnosticsUI() {
                 relayHint.textContent = `Relaying via ${diagState.turnHost} — TURN active${forceTag}`
             else if (counts.relay > 0)
                 relayHint.textContent = `TURN (${diagState.turnHost}) ready — ${counts.relay} relay candidate${counts.relay > 1 ? 's' : ''} gathered${forceTag}`
+            else if (diagState.iceState === 'failed')
+                relayHint.textContent = `TURN relay failed — ${diagState.turnHost} unreachable or credentials rejected${forceTag}`
             else
                 relayHint.textContent = `TURN configured (${diagState.turnHost}) — gathering...${forceTag}`
         } else {
@@ -322,7 +326,12 @@ document.getElementById('copy-report-btn')!.addEventListener('click', () => {
     const { text } = getDiagnosis()
 
     const turnLine = diagState.turnConfigured
-        ? `TURN server:      ${diagState.turnHost}${diagState.pairLocalType === 'relay' ? ' (active — relaying traffic)' : counts.relay > 0 ? ' (standby — reachable)' : ' (configured — gathering...)'}`
+        ? `TURN server:      ${diagState.turnHost}${
+            diagState.pairLocalType === 'relay' ? ' (active — relaying traffic)' :
+            counts.relay > 0                    ? ' (standby — reachable)' :
+            diagState.iceState === 'failed'     ? ' (relay FAILED — unreachable or wrong credentials)' :
+                                                  ' (configured — gathering...)'
+          }${diagState.forceRelay ? ' [FORCE RELAY]' : ''}`
         : 'TURN server:      Not configured'
 
     const lines = [
@@ -337,9 +346,13 @@ document.getElementById('copy-report-btn')!.addEventListener('click', () => {
         turnLine,
         '',
         'ICE Candidates gathered (local):',
-        `  Host  (local IP):  ${counts.host}`,
-        `  STUN  (public IP): ${counts.srflx}${counts.srflx === 0 ? '  ← UDP may be blocked' : ''}`,
-        `  TURN  (relay):     ${counts.relay}${counts.relay === 0 && !diagState.turnConfigured ? '  ← no TURN server configured' : counts.relay === 0 && diagState.turnConfigured ? '  ← TURN server may be unreachable' : ''}`,
+        `  Host  (local IP):  ${counts.host}${diagState.forceRelay && counts.host === 0 ? '  ← not gathered (force relay mode)' : ''}`,
+        `  STUN  (public IP): ${counts.srflx}${diagState.forceRelay && counts.srflx === 0 ? '  ← not gathered (force relay mode)' : counts.srflx === 0 ? '  ← UDP may be blocked' : ''}`,
+        `  TURN  (relay):     ${counts.relay}${
+            counts.relay === 0 && !diagState.turnConfigured ? '  ← no TURN server configured' :
+            counts.relay === 0 && diagState.forceRelay      ? '  ← TURN server unreachable or rejected credentials' :
+            counts.relay === 0 && diagState.turnConfigured  ? '  ← TURN server may be unreachable' : ''
+        }`,
         '',
         diagState.rtt >= 0          ? `RTT:              ${diagState.rtt} ms` : '',
         diagState.pairLocalType     ? `Active path:      ${diagState.pairLocalType} ↔ ${diagState.pairRemoteType}` : '',
@@ -1443,6 +1456,12 @@ function createPeerConnection() {
         if (s === 'checking' && !diagState.iceCheckingStart) diagState.iceCheckingStart = Date.now()
         if (s !== 'checking') diagState.iceCheckingStart = 0
         if (s === 'connected' || s === 'completed') startStatsPolling()
+        if (s === 'failed') {
+            if (diagState.forceRelay)
+                setStatus('TURN relay failed — check server credentials', 'error')
+            else
+                setStatus('Connection failed — check Network tab', 'error')
+        }
         updateDiagnosticsUI()
     }
 
