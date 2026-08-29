@@ -829,6 +829,14 @@
             color: var(--text-1);
             font-weight: 600;
         }
+        .card-sig {
+            margin-top: 22px;
+            text-align: center;
+            font-size: .63rem;
+            color: var(--text-2);
+            letter-spacing: .03em;
+        }
+        .card-sig span { color: var(--text-1); font-weight: 600; }
 
         /* ── Responsive ── */
         @media (max-width: 600px) {
@@ -857,6 +865,7 @@
             <input id="join-code-input" type="text" placeholder="room-code" autocomplete="off" />
             <button id="join-code-btn">Join →</button>
         </div>
+        <p class="card-sig">Made with ♥ by <span>Ashish Singh</span></p>
     </div>
 </div>
 
@@ -873,6 +882,7 @@
         <label id="join-name-label" for="name-input">Your name</label>
         <input id="name-input" type="text" placeholder="e.g. Ashish" maxlength="30" autocomplete="off" />
         <button id="join-btn" disabled>Join Room →</button>
+        <p class="card-sig">Made with ♥ by <span>Ashish Singh</span></p>
     </div>
 </div>
 
