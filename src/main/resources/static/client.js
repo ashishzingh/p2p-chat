@@ -19565,7 +19565,7 @@ function _x(n, e) {
 function td(n, e = !0) {
   Dt = n, document.querySelectorAll(".lang-btn").forEach((t) => t.classList.toggle("active", t.dataset.lang === n)), xe.dispatch({ effects: ed.reconfigure(Rx[n] || ma()) }), _n = !0, xe.dispatch({ changes: { from: 0, to: xe.state.doc.length, insert: Iu[n] || "" } }), _n = !1, e && me({ source: "code", content: xe.state.doc.toString(), lang: n });
 }
-document.querySelectorAll(".lang-btn").forEach((n) => {
+document.querySelectorAll(".lang-btn[data-lang]").forEach((n) => {
   n.addEventListener("click", () => td(n.dataset.lang));
 });
 const Ht = document.getElementById("run-btn"), id = document.getElementById("output-text"), lr = document.getElementById("output-badge"), qx = document.getElementById("clear-output-btn");

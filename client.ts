@@ -603,7 +603,7 @@ function setLang(lang: string, sendToChannel = true) {
     }
 }
 
-document.querySelectorAll('.lang-btn').forEach(btn => {
+document.querySelectorAll('.lang-btn[data-lang]').forEach(btn => {
     btn.addEventListener('click', () => setLang((btn as HTMLElement).dataset.lang!))
 })
 
