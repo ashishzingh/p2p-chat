@@ -81,8 +81,7 @@ const statusText = document.getElementById('status-text')!
 const messages   = document.getElementById('messages')!
 const msgInput   = document.getElementById('msg') as HTMLInputElement
 const sendBtn    = document.getElementById('send') as HTMLButtonElement
-const localLabel  = document.getElementById('local-label')!
-const remoteLabel = document.getElementById('remote-label')!
+const localLabel = document.getElementById('local-label')!
 
 // ── Diagnostics state ────────────────────────────────────────────────────────
 
@@ -275,9 +274,13 @@ function updateDiagnosticsUI() {
 }
 
 async function pollStats() {
-    if (!pc) { updateDiagnosticsUI(); return }
+    // Use the first connected peer's PC for stats (representative sample)
+    const activePc = [...peers.values()].find(p =>
+        p.pc.iceConnectionState === 'connected' || p.pc.iceConnectionState === 'completed'
+    )?.pc ?? peers.values().next().value?.pc
+    if (!activePc) { updateDiagnosticsUI(); return }
     try {
-        const stats = await pc.getStats()
+        const stats = await activePc.getStats()
         const candMap = new Map<string, RTCIceCandidateStats>()
         let activePair: RTCIceCandidatePairStats | null = null
 
@@ -361,8 +364,7 @@ document.getElementById('refresh-stats')!.addEventListener('click', pollStats)
 
 // ── Names ─────────────────────────────────────────────────────────────────────
 
-let myName   = 'You'
-let peerName = 'Peer'
+let myName = 'You'
 
 // ── Home screen ───────────────────────────────────────────────────────────────
 
@@ -509,7 +511,8 @@ function setStatus(text: string, state: 'connected' | 'waiting' | 'error' | '') 
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 
-function appendMessage(who: 'you' | 'peer' | 'system', text: string) {
+// who = 'you' | 'system' | <peer display name>
+function appendMessage(who: string, text: string) {
     if (who === 'system') {
         const el = document.createElement('div')
         el.className = 'system-msg'
@@ -517,16 +520,16 @@ function appendMessage(who: 'you' | 'peer' | 'system', text: string) {
         messages.appendChild(el)
     } else {
         const el = document.createElement('div')
-        el.className = `bubble ${who}`
+        el.className = `bubble ${who === 'you' ? 'you' : 'peer'}`
         const nameEl = document.createElement('div')
         nameEl.className = 'who'
-        nameEl.textContent = who === 'you' ? myName : peerName
+        nameEl.textContent = who === 'you' ? myName : who
         el.appendChild(nameEl)
         el.appendChild(document.createTextNode(text))
         messages.appendChild(el)
     }
     messages.scrollTop = messages.scrollHeight
-    if (who === 'peer') {
+    if (who !== 'you' && who !== 'system') {
         const drawer = document.getElementById('chat-drawer')
         if (drawer && !drawer.classList.contains('open'))
             document.getElementById('chat-notif')?.classList.add('show')
@@ -1334,8 +1337,11 @@ async function toggleCamera() {
             localVideo.srcObject = localStream
             setCamOn(true)
             setMicMuted(false)
-            if (pc && pc.connectionState !== 'closed') {
-                localStream.getTracks().forEach(t => pc!.addTrack(t, localStream!))
+            // Add tracks to every active peer connection
+            for (const { pc } of peers.values()) {
+                if (pc.connectionState !== 'closed') {
+                    localStream.getTracks().forEach(t => pc.addTrack(t, localStream!))
+                }
             }
         } catch { appendMessage('system', 'Camera/mic access denied') }
     } else {
@@ -1358,56 +1364,19 @@ toggleAudioBtn.addEventListener('click', toggleMic)
 pipCamBtn.addEventListener('click', toggleCamera)
 pipMicBtn.addEventListener('click', toggleMic)
 
-// ── WebRTC ────────────────────────────────────────────────────────────────────
+// ── WebRTC — full-mesh multi-peer ─────────────────────────────────────────────
 
-let pc: RTCPeerConnection | null = null
-let dataChannel: RTCDataChannel | null = null
-let isOfferer = false
-let makingOffer = false
-const pendingCandidates: RTCIceCandidateInit[] = []
-
-function sendData(msg: DataMsg) {
-    if (dataChannel?.readyState === 'open') {
-        dataChannel.send(JSON.stringify(msg))
-    }
+interface PeerState {
+    pc:      RTCPeerConnection
+    dc:      RTCDataChannel | null
+    name:    string
+    pending: RTCIceCandidateInit[]
+    tileEl:  HTMLDivElement
+    videoEl: HTMLVideoElement
 }
 
-function handleDataMessage(raw: string) {
-    const msg: DataMsg = JSON.parse(raw)
-    if (msg.source === 'hello') {
-        peerName = msg.name
-        remoteLabel.textContent = msg.name
-        const ra = document.getElementById('remote-avatar')
-        if (ra) ra.textContent = msg.name[0].toUpperCase()
-        return
-    }
-    if (msg.source === 'chat')        return appendMessage('peer', msg.text)
-    if (msg.source === 'code')        return applyRemoteCode(msg.content, msg.lang)
-    if (msg.source === 'code-output') return showOutput(msg.output, msg.output.startsWith('ERROR'), msg.output.startsWith('⚠️'))
-    if (msg.source === 'diagram')     return applyRemoteDiagram(msg)
-    if (msg.source === 'problem')     return applyRemoteProblem(msg.content)
-}
-
-function setupDataChannel(ch: RTCDataChannel) {
-    dataChannel = ch
-    ch.onopen = () => {
-        setStatus('Connected', 'connected')
-        msgInput.disabled = false
-        sendBtn.disabled  = false
-        sendData({ source: 'hello', name: myName })
-        if (problemEditor.value) sendData({ source: 'problem', content: problemEditor.value })
-        appendMessage('system', 'Connected to peer')
-        diagState.dcState = 'open'
-        updateDiagnosticsUI()
-    }
-    ch.onclose = () => {
-        setStatus('Peer disconnected', 'waiting')
-        diagState.dcState = 'closed'
-        stopStatsPolling()
-        updateDiagnosticsUI()
-    }
-    ch.onmessage = e => handleDataMessage(e.data)
-}
+const peers = new Map<string, PeerState>()
+let myId = ''   // assigned by server on join
 
 const STUN_ONLY: RTCConfiguration = {
     iceServers: [
@@ -1416,89 +1385,196 @@ const STUN_ONLY: RTCConfiguration = {
     ],
 }
 
-function createPeerConnection() {
+// ── Send to all open data channels ───────────────────────────────────────────
+
+function sendData(msg: DataMsg) {
+    const payload = JSON.stringify(msg)
+    for (const { dc } of peers.values()) {
+        if (dc?.readyState === 'open') dc.send(payload)
+    }
+}
+
+// ── Per-peer data channel setup ───────────────────────────────────────────────
+
+function handleDataMessage(raw: string, peerId: string) {
+    const msg   = JSON.parse(raw) as DataMsg
+    const state = peers.get(peerId)
+
+    if (msg.source === 'hello') {
+        if (state) {
+            state.name = msg.name
+            const nameBar = document.getElementById(`pip-name-${peerId}`)
+            if (nameBar) nameBar.textContent = msg.name
+            const avatar  = document.getElementById(`pip-avatar-${peerId}`)
+            if (avatar)  avatar.textContent  = msg.name[0].toUpperCase()
+        }
+        return
+    }
+    if (msg.source === 'chat')        return appendMessage(state?.name ?? 'Peer', msg.text)
+    if (msg.source === 'code')        return applyRemoteCode(msg.content, msg.lang)
+    if (msg.source === 'code-output') return showOutput(msg.output, msg.output.startsWith('ERROR'), msg.output.startsWith('⚠️'))
+    if (msg.source === 'diagram')     return applyRemoteDiagram(msg)
+    if (msg.source === 'problem')     return applyRemoteProblem(msg.content)
+}
+
+function setupDataChannel(ch: RTCDataChannel, peerId: string) {
+    const state = peers.get(peerId)
+    if (state) state.dc = ch
+
+    ch.onopen = () => {
+        msgInput.disabled = false
+        sendBtn.disabled  = false
+        setStatus('Connected', 'connected')
+        ch.send(JSON.stringify({ source: 'hello', name: myName }))
+        if (problemEditor.value) ch.send(JSON.stringify({ source: 'problem', content: problemEditor.value }))
+        appendMessage('system', `${state?.name || 'Peer'} connected`)
+        diagState.dcState = 'open'
+        updateDiagnosticsUI()
+        startStatsPolling()
+    }
+    ch.onclose = () => {
+        const anyOpen = [...peers.values()].some(p => p.dc?.readyState === 'open')
+        if (!anyOpen) {
+            diagState.dcState = 'closed'
+            stopStatsPolling()
+            updateDiagnosticsUI()
+        }
+    }
+    ch.onmessage = e => handleDataMessage(e.data, peerId)
+}
+
+// ── Create a pip video tile for a remote peer ─────────────────────────────────
+
+function createPeerTile(peerId: string): { tileEl: HTMLDivElement; videoEl: HTMLVideoElement } {
+    const tileEl  = document.createElement('div')
+    tileEl.className = 'pip-tile'
+    tileEl.id = `pip-tile-${peerId}`
+
+    const videoEl = document.createElement('video')
+    videoEl.autoplay   = true
+    videoEl.playsInline = true
+    tileEl.appendChild(videoEl)
+
+    const noCam   = document.createElement('div')
+    noCam.className = 'pip-no-cam'
+    const avatar  = document.createElement('div')
+    avatar.className = 'pip-avatar'
+    avatar.id = `pip-avatar-${peerId}`
+    avatar.textContent = 'P'
+    noCam.appendChild(avatar)
+    tileEl.appendChild(noCam)
+
+    const nameBar = document.createElement('div')
+    nameBar.className = 'pip-name-bar'
+    nameBar.id = `pip-name-${peerId}`
+    nameBar.textContent = 'Peer'
+    tileEl.appendChild(nameBar)
+
+    document.getElementById('pip-tiles')!.appendChild(tileEl)
+    return { tileEl, videoEl }
+}
+
+// ── Connect to one peer ───────────────────────────────────────────────────────
+
+function connectToPeer(peerId: string) {
+    if (peers.has(peerId)) return
+
+    let pc: RTCPeerConnection
     try {
         pc = new RTCPeerConnection(rtcConfig)
     } catch {
-        // TURN config invalid (bad URL) — fall back to STUN only
         console.warn('RTCPeerConnection failed with TURN config, retrying STUN-only')
         rtcConfig = STUN_ONLY
         diagState.turnConfigured = false
         pc = new RTCPeerConnection(STUN_ONLY)
     }
 
+    const { tileEl, videoEl } = createPeerTile(peerId)
+    const state: PeerState = { pc, dc: null, name: 'Peer', pending: [], tileEl, videoEl }
+    peers.set(peerId, state)
+
     pc.onicecandidate = ({ candidate }) => {
         if (candidate) {
-            ws.send(JSON.stringify({ type: 'candidate', candidate }))
+            ws.send(JSON.stringify({ type: 'candidate', to: peerId, candidate }))
+            // Aggregate candidates across all peers into diagState for display
             diagState.localCandidates.push({ type: candidate.type ?? 'unknown', protocol: candidate.protocol ?? 'unknown' })
             updateDiagnosticsUI()
         }
     }
 
     pc.oniceconnectionstatechange = () => {
-        const s = pc!.iceConnectionState
-        diagState.iceState = s
-        if (s === 'checking' && !diagState.iceCheckingStart) diagState.iceCheckingStart = Date.now()
-        if (s !== 'checking') diagState.iceCheckingStart = 0
-        if (s === 'connected' || s === 'completed') startStatsPolling()
+        // Reflect the best ICE state across all peers
+        const states = [...peers.values()].map(p => p.pc.iceConnectionState)
+        const best =
+            states.includes('connected') || states.includes('completed') ? 'connected' :
+            states.includes('checking')     ? 'checking'     :
+            states.includes('disconnected') ? 'disconnected' :
+            states.includes('failed')       ? 'failed'       : 'new'
+        diagState.iceState = best
+        if (best === 'checking' && !diagState.iceCheckingStart) diagState.iceCheckingStart = Date.now()
+        if (best !== 'checking') diagState.iceCheckingStart = 0
         updateDiagnosticsUI()
     }
 
     pc.onicegatheringchange = () => {
-        diagState.gatheringState = pc!.iceGatheringState
+        diagState.gatheringState = pc.iceGatheringState
         updateDiagnosticsUI()
     }
 
     pc.ontrack = e => {
-        if (!remoteVideo.srcObject) remoteVideo.srcObject = new MediaStream()
-        ;(remoteVideo.srcObject as MediaStream).addTrack(e.track)
-        document.getElementById('pip-remote')!.classList.add('cam-on')
+        if (!videoEl.srcObject) videoEl.srcObject = new MediaStream()
+        ;(videoEl.srcObject as MediaStream).addTrack(e.track)
+        tileEl.classList.add('cam-on')
     }
 
-    pc.ondatachannel = e => setupDataChannel(e.channel)
+    pc.ondatachannel = e => setupDataChannel(e.channel, peerId)
 
     pc.onconnectionstatechange = () => {
-        if (pc?.connectionState === 'disconnected' || pc?.connectionState === 'failed') {
-            setStatus('Peer disconnected', 'waiting')
-            appendMessage('system', 'Peer left the room')
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            appendMessage('system', `${state.name || 'Peer'} lost connection`)
         }
     }
 
-    pc.onnegotiationneeded = async () => {
-        if (!isOfferer) return
-        try {
-            makingOffer = true
-            await pc!.setLocalDescription()
-            ws.send(JSON.stringify({ type: 'offer', sdp: pc!.localDescription }))
-        } finally { makingOffer = false }
+    if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream!))
+
+    // Smaller ID initiates the offer — no coin-flip or negotiation needed
+    if (myId < peerId) {
+        const ch = pc.createDataChannel('main')
+        setupDataChannel(ch, peerId)
+        pc.onnegotiationneeded = async () => {
+            try {
+                await pc.setLocalDescription()
+                ws.send(JSON.stringify({ type: 'offer', to: peerId, sdp: pc.localDescription }))
+            } catch (e) { console.warn('offer failed', e) }
+        }
     }
-
-    if (localStream) localStream.getTracks().forEach(t => pc!.addTrack(t, localStream!))
-    return pc
 }
 
-async function startAsOfferer() {
-    isOfferer = true
-    createPeerConnection()
-    const ch = pc!.createDataChannel('main')
-    setupDataChannel(ch)
+// ── Remove one peer (they left or disconnected) ───────────────────────────────
+
+function removePeer(peerId: string) {
+    const state = peers.get(peerId)
+    if (!state) return
+    try { state.pc.close() } catch {}
+    state.tileEl.remove()
+    peers.delete(peerId)
+
+    if (peers.size === 0) {
+        msgInput.disabled = true
+        sendBtn.disabled  = true
+        setStatus('Waiting for peer…', 'waiting')
+        stopStatsPolling()
+        resetDiagState()
+    }
 }
 
-function startAsAnswerer() {
-    isOfferer = false
-    createPeerConnection()
-}
+// ── Tear down all peers (disconnect / WS close) ───────────────────────────────
 
 function resetPeerState() {
-    if (pc) { try { pc.close() } catch {} pc = null }
-    dataChannel = null
-    isOfferer   = false
-    makingOffer = false
-    pendingCandidates.length = 0
+    for (const peerId of [...peers.keys()]) removePeer(peerId)
+    peers.clear()
     msgInput.disabled = true
     sendBtn.disabled  = true
-    remoteVideo.srcObject = null
-    document.getElementById('pip-remote')!.classList.remove('cam-on')
     stopStatsPolling()
     resetDiagState()
 }
@@ -1530,8 +1606,8 @@ function connect() {
         if (msg.type === 'pong') return
 
         if (msg.type === 'joined') {
+            myId = msg.myId as string
             if (msg.turn?.urls) {
-                // extract hostname from first URL e.g. "turn:relay1.expressturn.com:3478?transport=udp"
                 const hostMatch = (msg.turn.urls[0] as string).match(/turn:([^:?/]+)/)
                 diagState.turnConfigured = true
                 diagState.turnHost       = hostMatch ? hostMatch[1] : 'configured'
@@ -1544,50 +1620,56 @@ function connect() {
                 }
                 updateDiagnosticsUI()
             }
-            if (msg.peers > 0) await startAsOfferer()
-            else startAsAnswerer()
+            // Connect to every peer already in the room
+            for (const peerId of (msg.peers as string[])) {
+                connectToPeer(peerId)
+            }
             return
         }
 
         if (msg.type === 'peer-joined') {
             playPing()
-            appendMessage('system', 'Peer joined the room')
-            if (!isOfferer) startAsAnswerer()
+            appendMessage('system', 'Someone joined the room')
+            connectToPeer(msg.peerId as string)
             return
         }
 
         if (msg.type === 'peer-left') {
-            appendMessage('system', 'Peer left the room')
-            resetPeerState()
-            setStatus('Waiting for peer…', 'waiting')
+            const state = peers.get(msg.peerId as string)
+            appendMessage('system', `${state?.name || 'Peer'} left the room`)
+            removePeer(msg.peerId as string)
             return
         }
 
         if (msg.type === 'offer') {
-            if (!pc) startAsAnswerer()
-            const offerCollision = makingOffer || pc!.signalingState !== 'stable'
-            if (offerCollision && !isOfferer) return
-            await pc!.setRemoteDescription(new RTCSessionDescription(msg.sdp))
-            pendingCandidates.splice(0).forEach(c => pc!.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}))
-            const answer = await pc!.createAnswer()
-            await pc!.setLocalDescription(answer)
-            ws.send(JSON.stringify({ type: 'answer', sdp: pc!.localDescription }))
+            const fromId = msg.from as string
+            // Ensure we have a PeerState (edge case: peer joined just before us)
+            if (!peers.has(fromId)) connectToPeer(fromId)
+            const state = peers.get(fromId)!
+            await state.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp))
+            state.pending.splice(0).forEach(c => state.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}))
+            const answer = await state.pc.createAnswer()
+            await state.pc.setLocalDescription(answer)
+            ws.send(JSON.stringify({ type: 'answer', to: fromId, sdp: state.pc.localDescription }))
             return
         }
 
         if (msg.type === 'answer') {
-            if (pc?.signalingState === 'have-local-offer') {
-                await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp))
-                pendingCandidates.splice(0).forEach(c => pc!.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}))
+            const state = peers.get(msg.from as string)
+            if (state?.pc.signalingState === 'have-local-offer') {
+                await state.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp))
+                state.pending.splice(0).forEach(c => state.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}))
             }
             return
         }
 
         if (msg.type === 'candidate') {
-            if (pc?.remoteDescription) {
-                pc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {})
+            const state = peers.get(msg.from as string)
+            if (!state) return
+            if (state.pc.remoteDescription) {
+                state.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {})
             } else {
-                pendingCandidates.push(msg.candidate)
+                state.pending.push(msg.candidate)
             }
             return
         }
@@ -1612,7 +1694,9 @@ function connect() {
 
 function sendChatMessage() {
     const text = msgInput.value.trim()
-    if (!text || dataChannel?.readyState !== 'open') return
+    if (!text) return
+    const anyOpen = [...peers.values()].some(p => p.dc?.readyState === 'open')
+    if (!anyOpen) return
     sendData({ source: 'chat', text })
     appendMessage('you', text)
     msgInput.value = ''
