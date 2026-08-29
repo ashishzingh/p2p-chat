@@ -29,14 +29,16 @@ const SVG = {
     camOff: _svg('<line x1="1" y1="1" x2="23" y2="23"/><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34L23 7v10"/>'),
     chat:   _svg('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
     moon:   _svg('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'),
+    screen: _svg('<rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="22"/>'),
 }
 
 // Initialize icon spans once DOM is ready
-document.getElementById('leave-icon')!.innerHTML = SVG.leave
-document.getElementById('chat-icon')!.innerHTML  = SVG.chat
-document.getElementById('audio-icon')!.innerHTML = SVG.micOn
-document.getElementById('video-icon')!.innerHTML = SVG.camOff
-document.getElementById('theme-icon')!.innerHTML = SVG.moon
+document.getElementById('leave-icon')!.innerHTML  = SVG.leave
+document.getElementById('chat-icon')!.innerHTML   = SVG.chat
+document.getElementById('audio-icon')!.innerHTML  = SVG.micOn
+document.getElementById('video-icon')!.innerHTML  = SVG.camOff
+document.getElementById('theme-icon')!.innerHTML  = SVG.moon
+document.getElementById('screen-icon')!.innerHTML = SVG.screen
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -929,6 +931,7 @@ document.getElementById('disconnect-btn')!.addEventListener('click', () => {
     if (ws) { try { ws.close() } catch {} }
     resetPeerState()
     // Stop all media tracks
+    if (screenStream) stopScreenShare()
     localStream?.getTracks().forEach(t => t.stop())
     localStream = null
     // Navigate back to home
@@ -1433,11 +1436,13 @@ window.addEventListener('resize', () => {
 
 // ── Video ─────────────────────────────────────────────────────────────────────
 
-let localStream: MediaStream | null = null
+let localStream:  MediaStream | null = null
+let screenStream: MediaStream | null = null
 let micMuted = false
-const localVideo  = document.getElementById('local-video') as HTMLVideoElement
+const localVideo     = document.getElementById('local-video') as HTMLVideoElement
 const toggleVideoBtn = document.getElementById('toggle-video') as HTMLButtonElement
 const toggleAudioBtn = document.getElementById('toggle-audio') as HTMLButtonElement
+const toggleScreenBtn = document.getElementById('toggle-screen') as HTMLButtonElement
 const pipCamBtn  = document.getElementById('pip-cam-btn') as HTMLButtonElement
 const pipMicBtn  = document.getElementById('pip-mic-btn') as HTMLButtonElement
 
@@ -1480,6 +1485,7 @@ async function toggleCamera() {
             }
         } catch { appendMessage('system', 'Camera/mic access denied') }
     } else {
+        if (screenStream) stopScreenShare()
         localStream.getTracks().forEach(t => t.stop())
         localStream = null
         localVideo.srcObject = null
@@ -1497,8 +1503,58 @@ function toggleMic() {
     track('mic_toggled', { muted: enabled })
 }
 
+async function toggleScreen() {
+    if (screenStream) { stopScreenShare(); return }
+    try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15, width: { ideal: 1920 } } })
+        const screenTrack = screenStream.getVideoTracks()[0]
+        screenTrack.contentHint = 'detail'
+
+        for (const { pc } of peers.values()) {
+            if (pc.connectionState === 'closed') continue
+            const sender = pc.getSenders().find(s => s.track?.kind === 'video')
+            if (sender) await sender.replaceTrack(screenTrack)
+            else pc.addTrack(screenTrack, screenStream!)
+        }
+
+        localVideo.srcObject = screenStream
+        document.getElementById('pip-local')!.classList.add('cam-on')
+        toggleScreenBtn.classList.add('active')
+        toggleVideoBtn.disabled = true
+
+        appendMessage('system', `${myName} started screen sharing`)
+        track('screen_share_started', {})
+
+        screenTrack.onended = () => stopScreenShare()
+    } catch {
+        screenStream = null
+    }
+}
+
+function stopScreenShare() {
+    if (!screenStream) return
+    screenStream.getTracks().forEach(t => t.stop())
+    screenStream = null
+
+    for (const { pc } of peers.values()) {
+        if (pc.connectionState === 'closed') continue
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video')
+        if (!sender) continue
+        sender.replaceTrack(localStream?.getVideoTracks()[0] ?? null)
+    }
+
+    localVideo.srcObject = localStream ?? null
+    if (!localStream) document.getElementById('pip-local')!.classList.remove('cam-on')
+    toggleScreenBtn.classList.remove('active')
+    toggleVideoBtn.disabled = false
+
+    appendMessage('system', `${myName} stopped screen sharing`)
+    track('screen_share_stopped', {})
+}
+
 toggleVideoBtn.addEventListener('click', toggleCamera)
 toggleAudioBtn.addEventListener('click', toggleMic)
+toggleScreenBtn.addEventListener('click', toggleScreen)
 pipCamBtn.addEventListener('click', toggleCamera)
 pipMicBtn.addEventListener('click', toggleMic)
 
@@ -1713,6 +1769,12 @@ function connectToPeer(peerId: string, isExisting = false) {
     }
 
     if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream!))
+    if (screenStream) {
+        const screenTrack = screenStream.getVideoTracks()[0]
+        const videoSender = pc.getSenders().find(s => s.track?.kind === 'video')
+        if (videoSender) videoSender.replaceTrack(screenTrack)
+        else pc.addTrack(screenTrack, screenStream!)
+    }
 
     // Smaller ID initiates the offer — no coin-flip or negotiation needed
     if (myId < peerId) {
