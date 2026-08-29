@@ -715,9 +715,9 @@ async function formatCode(code: string, lang: string): Promise<string> {
     }
 
     if (lang === 'java') {
-        const prettier   = await import('https://esm.sh/prettier@3/standalone' as string)
+        // prettier@2 standalone has stable support for prettier-plugin-java
+        const prettier   = await import('https://esm.sh/prettier@2/standalone' as string)
         const pluginJava = await import('https://esm.sh/prettier-plugin-java@2' as string)
-        // esm.sh wraps CJS modules — the actual plugin object is on .default
         const plugin = (pluginJava as any).default ?? pluginJava
         return (prettier as any).format(code, {
             parser: 'java',
@@ -729,11 +729,14 @@ async function formatCode(code: string, lang: string): Promise<string> {
 
     // C and C++ — clang-format compiled to WASM
     const filename = lang === 'c' ? 'file.c' : 'file.cpp'
-    const mod = await import('https://esm.sh/@wasm-fmt/clang-format' as string)
-    await (mod as any).default()   // initialise WASM — no-op on subsequent calls
-    // style must be .clang-format YAML content, not JSON
-    const style = 'BasedOnStyle: Google\nIndentWidth: 4\nColumnLimit: 100\n'
-    return (mod as any).format(code, filename, style)
+    const mod = await import('https://esm.sh/@wasm-fmt/clang-format' as string) as any
+    // esm.sh may present the default export as init fn or nest everything under .default
+    const init = typeof mod.default === 'function' ? mod.default : mod.default?.default
+    const fmt  = typeof mod.format  === 'function' ? mod.format  : mod.default?.format
+    if (typeof init !== 'function') throw new Error('clang-format: init() not found')
+    if (typeof fmt  !== 'function') throw new Error('clang-format: format() not found')
+    await init()
+    return fmt(code, filename)
 }
 
 document.getElementById('format-btn')!.addEventListener('click', async () => {
@@ -752,9 +755,11 @@ document.getElementById('format-btn')!.addEventListener('click', async () => {
         sendData({ source: 'code', content: formatted, lang: currentLang })
         btn.textContent = '✓ Done'
         setTimeout(() => { btn.textContent = orig; (btn as HTMLButtonElement).disabled = false }, 1200)
-    } catch {
+    } catch (e: any) {
+        console.error('[format]', e)
+        showOutput(`Format failed (${currentLang}): ${e?.message ?? e}`, false, true)
         btn.textContent = '✕ Error'
-        setTimeout(() => { btn.textContent = orig; (btn as HTMLButtonElement).disabled = false }, 2000)
+        setTimeout(() => { btn.textContent = orig; (btn as HTMLButtonElement).disabled = false }, 2500)
     }
 })
 
