@@ -43,6 +43,9 @@ public class TurnService {
     @Value("${turn.credential-ttl-seconds:86400}")
     private volatile int credentialTtlSeconds;
 
+    @Value("${turn.force-relay:false}")
+    private volatile boolean forceRelay;
+
     /**
      * Generates ICE-ready credentials for the configured TURN server.
      * Returns empty if TURN is disabled or not fully configured.
@@ -78,9 +81,10 @@ public class TurnService {
         if (tlsPort > 0) urls.add("turns:" + cleanHost + ":" + tlsPort + "?transport=tcp");
 
         Map<String, Object> turn = new LinkedHashMap<>();
-        turn.put("urls",       urls);
-        turn.put("username",   user);
-        turn.put("credential", credential);
+        turn.put("urls",        urls);
+        turn.put("username",    user);
+        turn.put("credential",  credential);
+        turn.put("forceRelay",  forceRelay);
         return Optional.of(turn);
     }
 
@@ -96,6 +100,7 @@ public class TurnService {
         m.put("tlsPort",              tlsPort);
         m.put("username",             username);
         m.put("credentialTtlSeconds", credentialTtlSeconds);
+        m.put("forceRelay",           forceRelay);
         // password and secret intentionally omitted
         return m;
     }
@@ -113,6 +118,7 @@ public class TurnService {
         if (body.containsKey("password"))             password             = (String)  body.get("password");
         if (body.containsKey("secret"))               secret               = (String)  body.get("secret");
         if (body.containsKey("credentialTtlSeconds")) credentialTtlSeconds = toInt(body.get("credentialTtlSeconds"));
+        if (body.containsKey("forceRelay"))           forceRelay           = (Boolean) body.get("forceRelay");
     }
 
     private int toInt(Object v) {
