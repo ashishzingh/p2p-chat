@@ -109,6 +109,7 @@ type DataMsg =
     | { source: 'diagram'; op: 'redo' }
     | { source: 'diagram'; op: 'clear' }
     | { source: 'mic-state'; muted: boolean }
+    | { source: 'cam-state'; on: boolean }
     | { source: 'chat-sync'; history: Array<{ who: string; text: string }> }
     | { source: 'timer-sync'; elapsed: number; running: boolean; startedAt: number }
 
@@ -1538,6 +1539,7 @@ async function toggleCamera() {
             setCamOn(true)
             setMicMuted(false)
             track('camera_toggled', { on: true })
+            sendData({ source: 'cam-state', on: true })
             for (const { pc } of peers.values()) {
                 if (pc.connectionState === 'closed') continue
                 for (const track of localStream.getTracks()) {
@@ -1554,6 +1556,7 @@ async function toggleCamera() {
         localStream = null
         localVideo.srcObject = null
         setCamOn(false)
+        sendData({ source: 'cam-state', on: false })
         track('camera_toggled', { on: false })
     }
 }
@@ -1678,6 +1681,10 @@ function handleDataMessage(raw: string, peerId: string) {
         document.getElementById(`pip-tile-${peerId}`)?.classList.toggle('peer-muted', msg.muted)
         return
     }
+    if (msg.source === 'cam-state') {
+        document.getElementById(`pip-tile-${peerId}`)?.classList.toggle('cam-on', msg.on)
+        return
+    }
     if (msg.source === 'chat-sync') {
         replayingHistory = true
         msg.history.forEach(m => appendMessage(m.who, m.text))
@@ -1700,6 +1707,7 @@ function setupDataChannel(ch: RTCDataChannel, peerId: string) {
         setStatus('Connected', 'connected')
         ch.send(JSON.stringify({ source: 'hello', name: myName }))
         ch.send(JSON.stringify({ source: 'mic-state', muted: micMuted }))
+        ch.send(JSON.stringify({ source: 'cam-state', on: !!localStream }))
         if (state?.isExisting) {
             // Sync current room state to the newly joined peer
             ch.send(JSON.stringify({ source: 'code', content: editor.state.doc.toString(), lang: currentLang }))
