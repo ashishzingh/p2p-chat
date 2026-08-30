@@ -500,6 +500,47 @@
             border-color: var(--accent);
             color: var(--accent);
         }
+
+        /* ── Language picker dropdown ── */
+        #lang-picker { position: relative; }
+        #lang-picker-btn {
+            display: flex; align-items: center; gap: 6px;
+            padding: 3px 9px 3px 7px;
+        }
+        #lang-picker-btn .chevron { font-size: .55rem; opacity: .5; transition: transform var(--transition); }
+        #lang-picker.open #lang-picker-btn .chevron { transform: rotate(180deg); }
+        #lang-picker.open #lang-picker-btn { border-color: var(--accent); color: var(--text-0); }
+        #lang-menu {
+            position: absolute; top: calc(100% + 6px); left: 0;
+            background: var(--bg-1); border: 1px solid var(--bg-3);
+            border-radius: 11px; padding: 5px;
+            display: none; flex-direction: column; gap: 2px;
+            min-width: 155px;
+            box-shadow: var(--shadow), 0 0 0 1px rgba(255,255,255,.04);
+            z-index: 300; animation: menuDrop .15s ease;
+        }
+        #lang-picker.open #lang-menu { display: flex; }
+        .lang-option {
+            display: flex; align-items: center; gap: 9px;
+            padding: 7px 10px; border-radius: 8px;
+            cursor: pointer; background: none; border: none;
+            color: var(--text-1); font-size: .78rem; font-weight: 500;
+            width: 100%; text-align: left;
+            transition: background var(--transition), color var(--transition);
+        }
+        .lang-option:hover { background: var(--bg-2); color: var(--text-0); }
+        .lang-option.active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--text-0); }
+        .lo-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            min-width: 30px; padding: 2px 5px; border-radius: 4px;
+            font-size: .62rem; font-weight: 700;
+            font-family: 'SF Mono', 'Fira Code', monospace; letter-spacing: .03em;
+        }
+        .lo-badge.js   { background: rgba(247,223,30,.15); color: #f7df1e; }
+        .lo-badge.java { background: rgba(248,152,32,.15);  color: #f89820; }
+        .lo-badge.c    { background: rgba(92,155,214,.15);  color: #5c9bd6; }
+        .lo-badge.cpp  { background: rgba(101,154,210,.15); color: #7db8e8; }
+
         #run-btn {
             margin-left: auto;
             padding: 5px 16px;
@@ -1260,10 +1301,19 @@
             <div id="editor-panel">
                 <div id="lang-bar">
                     <button id="sidebar-show-btn" title="Show problem panel">›</button>
-                    <button class="lang-btn active" data-lang="js">JavaScript</button>
-                    <button class="lang-btn" data-lang="java">Java</button>
-                    <button class="lang-btn" data-lang="c">C</button>
-                    <button class="lang-btn" data-lang="cpp">C++</button>
+                    <div id="lang-picker">
+                        <button id="lang-picker-btn" class="lang-btn">
+                            <span id="lang-badge" class="lo-badge js">JS</span>
+                            <span id="lang-label">JavaScript</span>
+                            <span class="chevron">▾</span>
+                        </button>
+                        <div id="lang-menu">
+                            <button class="lang-option active" data-lang="js"><span class="lo-badge js">JS</span><span>JavaScript</span></button>
+                            <button class="lang-option" data-lang="java"><span class="lo-badge java">☕</span><span>Java</span></button>
+                            <button class="lang-option" data-lang="c"><span class="lo-badge c">C</span><span>C</span></button>
+                            <button class="lang-option" data-lang="cpp"><span class="lo-badge cpp">C++</span><span>C++</span></button>
+                        </div>
+                    </div>
                     <button id="copy-code-btn" class="lang-btn" title="Copy code to clipboard">⎘ Copy</button>
                     <button id="download-code-btn" class="lang-btn" title="Download code file">↓ Save</button>
                     <button id="format-btn" class="lang-btn" title="Format code (JS only)">⌥ Format</button>

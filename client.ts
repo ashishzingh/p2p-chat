@@ -706,6 +706,12 @@ function playPing() {
 
 let currentLang = 'js'
 const langCompartment = new Compartment()
+const LANG_META: Record<string, { badge: string; cls: string; label: string }> = {
+    js:   { badge: 'JS',  cls: 'js',   label: 'JavaScript' },
+    java: { badge: '☕',  cls: 'java', label: 'Java' },
+    c:    { badge: 'C',   cls: 'c',    label: 'C' },
+    cpp:  { badge: 'C++', cls: 'cpp',  label: 'C++' },
+}
 let applyingRemote = false
 let codeDebounce: ReturnType<typeof setTimeout> | null = null
 
@@ -748,7 +754,14 @@ function applyRemoteCode(content: string, lang: string) {
 
 function setLang(lang: string, sendToChannel = true) {
     currentLang = lang
-    document.querySelectorAll('.lang-btn').forEach(b =>
+    const meta = LANG_META[lang]
+    if (meta) {
+        const badge = document.getElementById('lang-badge')!
+        badge.textContent = meta.badge
+        badge.className = `lo-badge ${meta.cls}`
+        document.getElementById('lang-label')!.textContent = meta.label
+    }
+    document.querySelectorAll('.lang-option').forEach(b =>
         b.classList.toggle('active', (b as HTMLElement).dataset.lang === lang))
     editor.dispatch({ effects: langCompartment.reconfigure(langExtensions[lang] || javascript()) })
     applyingRemote = true
@@ -759,9 +772,19 @@ function setLang(lang: string, sendToChannel = true) {
     }
 }
 
-document.querySelectorAll('.lang-btn[data-lang]').forEach(btn => {
-    btn.addEventListener('click', () => setLang((btn as HTMLElement).dataset.lang!))
+const langPickerEl = document.getElementById('lang-picker')!
+document.getElementById('lang-picker-btn')!.addEventListener('click', e => {
+    langPickerEl.classList.toggle('open')
+    e.stopPropagation()
 })
+document.querySelectorAll('.lang-option').forEach(btn => {
+    btn.addEventListener('click', e => {
+        setLang((btn as HTMLElement).dataset.lang!)
+        langPickerEl.classList.remove('open')
+        e.stopPropagation()
+    })
+})
+document.addEventListener('click', () => langPickerEl.classList.remove('open'))
 
 // ── Code execution ────────────────────────────────────────────────────────────
 
