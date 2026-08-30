@@ -705,6 +705,7 @@ function playPing() {
 // ── Code editor ───────────────────────────────────────────────────────────────
 
 let currentLang = 'js'
+const savedCode: Record<string, string> = {}
 const langCompartment = new Compartment()
 const LANG_META: Record<string, { badge: string; cls: string; label: string }> = {
     js:   { badge: 'JS',  cls: 'js',   label: 'JavaScript' },
@@ -753,6 +754,7 @@ function applyRemoteCode(content: string, lang: string) {
 }
 
 function setLang(lang: string, sendToChannel = true) {
+    savedCode[currentLang] = editor.state.doc.toString()
     currentLang = lang
     const meta = LANG_META[lang]
     if (meta) {
@@ -765,7 +767,7 @@ function setLang(lang: string, sendToChannel = true) {
         b.classList.toggle('active', (b as HTMLElement).dataset.lang === lang))
     editor.dispatch({ effects: langCompartment.reconfigure(langExtensions[lang] || javascript()) })
     applyingRemote = true
-    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: DEFAULT_CODE[lang] || '' } })
+    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: savedCode[lang] ?? DEFAULT_CODE[lang] ?? '' } })
     applyingRemote = false
     if (sendToChannel) {
         sendData({ source: 'code', content: editor.state.doc.toString(), lang })
