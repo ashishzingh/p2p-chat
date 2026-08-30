@@ -743,7 +743,10 @@ const editor = new EditorView({
             keymap.of([indentWithTab]),
             langCompartment.of(javascript({ jsx: true })),
             indentCompartment.of(indentUnit.of('  ')),
-            fontSizeCompartment.of(EditorView.theme({ '&': { fontSize: editorFontSize + 'px' } })),
+            fontSizeCompartment.of(EditorView.theme({
+                '& .cm-content':  { fontSize: editorFontSize + 'px', lineHeight: '1.6' },
+                '& .cm-gutters':  { fontSize: editorFontSize + 'px' },
+            })),
             EditorView.updateListener.of((update: ViewUpdate) => {
                 if (!update.docChanged || applyingRemote) return
                 if (codeDebounce) clearTimeout(codeDebounce)
@@ -760,7 +763,10 @@ const editor = new EditorView({
 function setFontSize(size: number) {
     editorFontSize = Math.min(22, Math.max(11, size))
     localStorage.setItem('editor-font-size', String(editorFontSize))
-    editor.dispatch({ effects: fontSizeCompartment.reconfigure(EditorView.theme({ '&': { fontSize: editorFontSize + 'px' } })) })
+    editor.dispatch({ effects: fontSizeCompartment.reconfigure(EditorView.theme({
+        '& .cm-content':  { fontSize: editorFontSize + 'px', lineHeight: '1.6' },
+        '& .cm-gutters':  { fontSize: editorFontSize + 'px' },
+    })) })
     document.getElementById('font-size-label')!.textContent = editorFontSize + 'px'
 }
 document.getElementById('font-size-label')!.textContent = editorFontSize + 'px'
