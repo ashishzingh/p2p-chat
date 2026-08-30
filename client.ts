@@ -1,6 +1,8 @@
 import { basicSetup } from 'codemirror'
-import { EditorView, ViewUpdate } from '@codemirror/view'
+import { EditorView, ViewUpdate, keymap } from '@codemirror/view'
 import { EditorState, Compartment } from '@codemirror/state'
+import { indentWithTab } from '@codemirror/commands'
+import { indentUnit } from '@codemirror/language'
 import { javascript } from '@codemirror/lang-javascript'
 import { java } from '@codemirror/lang-java'
 import { cpp } from '@codemirror/lang-cpp'
@@ -706,7 +708,8 @@ function playPing() {
 
 let currentLang = 'js'
 const savedCode: Record<string, string> = {}
-const langCompartment = new Compartment()
+const langCompartment   = new Compartment()
+const indentCompartment = new Compartment()
 const LANG_META: Record<string, { badge: string; cls: string; label: string }> = {
     js:   { badge: 'JS',  cls: 'js',   label: 'JavaScript' },
     java: { badge: '☕',  cls: 'java', label: 'Java' },
@@ -717,10 +720,16 @@ let applyingRemote = false
 let codeDebounce: ReturnType<typeof setTimeout> | null = null
 
 const langExtensions: Record<string, ReturnType<typeof javascript>> = {
-    js:   javascript(),
+    js:   javascript({ jsx: true, typescript: false }),
     java: java(),
     c:    cpp(),
     cpp:  cpp(),
+}
+const indentExtensions: Record<string, ReturnType<typeof indentUnit>> = {
+    js:   indentUnit.of('  '),
+    java: indentUnit.of('    '),
+    c:    indentUnit.of('    '),
+    cpp:  indentUnit.of('    '),
 }
 
 const editor = new EditorView({
@@ -729,7 +738,10 @@ const editor = new EditorView({
         extensions: [
             basicSetup,
             oneDark,
-            langCompartment.of(javascript()),
+            keymap.of([indentWithTab]),
+            langCompartment.of(javascript({ jsx: true })),
+            indentCompartment.of(indentUnit.of('  ')),
+            EditorView.theme({ '&': { fontSize: '13.5px' } }),
             EditorView.updateListener.of((update: ViewUpdate) => {
                 if (!update.docChanged || applyingRemote) return
                 if (codeDebounce) clearTimeout(codeDebounce)
@@ -765,7 +777,10 @@ function setLang(lang: string, sendToChannel = true) {
     }
     document.querySelectorAll('.lang-option').forEach(b =>
         b.classList.toggle('active', (b as HTMLElement).dataset.lang === lang))
-    editor.dispatch({ effects: langCompartment.reconfigure(langExtensions[lang] || javascript()) })
+    editor.dispatch({ effects: [
+        langCompartment.reconfigure(langExtensions[lang] || javascript()),
+        indentCompartment.reconfigure(indentExtensions[lang] || indentUnit.of('  ')),
+    ] })
     applyingRemote = true
     editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: savedCode[lang] ?? DEFAULT_CODE[lang] ?? '' } })
     applyingRemote = false
