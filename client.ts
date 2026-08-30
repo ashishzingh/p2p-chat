@@ -588,7 +588,7 @@ function appendMessage(who: string, text: string) {
         messages.appendChild(el)
     }
     messages.scrollTop = messages.scrollHeight
-    if (who !== 'you' && who !== 'system') {
+    if (!replayingHistory && who !== 'you' && who !== 'system') {
         const drawer = document.getElementById('chat-drawer')
         if (drawer && !drawer.classList.contains('open')) {
             setUnread(unreadCount + 1)
@@ -597,6 +597,8 @@ function appendMessage(who: string, text: string) {
         }
     }
 }
+
+let replayingHistory = false
 
 // ── Unread badge + toast ──────────────────────────────────────────────────────
 
@@ -1677,7 +1679,9 @@ function handleDataMessage(raw: string, peerId: string) {
         return
     }
     if (msg.source === 'chat-sync') {
+        replayingHistory = true
         msg.history.forEach(m => appendMessage(m.who, m.text))
+        replayingHistory = false
         return
     }
     if (msg.source === 'timer-sync') {
