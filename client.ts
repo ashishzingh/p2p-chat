@@ -783,16 +783,16 @@ document.getElementById('lang-picker-btn')!.addEventListener('click', e => {
         langMenuEl.style.top  = (rect.bottom + 6) + 'px'
         langMenuEl.style.left = rect.left + 'px'
     }
-    e.stopPropagation()
 })
 document.querySelectorAll('.lang-option').forEach(btn => {
-    btn.addEventListener('click', e => {
+    btn.addEventListener('click', () => {
         setLang((btn as HTMLElement).dataset.lang!)
         langPickerEl.classList.remove('open')
-        e.stopPropagation()
     })
 })
-document.addEventListener('click', () => langPickerEl.classList.remove('open'))
+document.addEventListener('click', e => {
+    if (!langPickerEl.contains(e.target as Node)) langPickerEl.classList.remove('open')
+})
 
 // ── Code execution ────────────────────────────────────────────────────────────
 
