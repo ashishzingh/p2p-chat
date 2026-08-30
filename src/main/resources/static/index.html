@@ -474,6 +474,15 @@
         .tab-panel.active { display: flex; }
 
         /* ── Code panel ── */
+        #font-size-ctrl {
+            display: flex; align-items: center; gap: 2px; margin-left: 2px;
+        }
+        #font-size-label {
+            font-size: .68rem; color: var(--text-2); min-width: 30px;
+            text-align: center; pointer-events: none;
+        }
+        #font-dec-btn, #font-inc-btn { padding: 3px 8px; font-weight: 700; }
+
         #lang-bar {
             display: flex;
             align-items: center;
@@ -1313,6 +1322,11 @@
                             <button class="lang-option" data-lang="c"><span class="lo-badge c">C</span><span>C</span></button>
                             <button class="lang-option" data-lang="cpp"><span class="lo-badge cpp">C++</span><span>C++</span></button>
                         </div>
+                    </div>
+                    <div id="font-size-ctrl">
+                        <button id="font-dec-btn" class="lang-btn" title="Decrease font size">A−</button>
+                        <span id="font-size-label">14px</span>
+                        <button id="font-inc-btn" class="lang-btn" title="Increase font size">A+</button>
                     </div>
                     <button id="copy-code-btn" class="lang-btn" title="Copy code to clipboard">⎘ Copy</button>
                     <button id="download-code-btn" class="lang-btn" title="Download code file">↓ Save</button>

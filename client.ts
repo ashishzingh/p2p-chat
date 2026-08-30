@@ -708,8 +708,10 @@ function playPing() {
 
 let currentLang = 'js'
 const savedCode: Record<string, string> = {}
-const langCompartment   = new Compartment()
-const indentCompartment = new Compartment()
+const langCompartment     = new Compartment()
+const indentCompartment   = new Compartment()
+const fontSizeCompartment = new Compartment()
+let editorFontSize = Math.min(22, Math.max(11, parseInt(localStorage.getItem('editor-font-size') || '14', 10)))
 const LANG_META: Record<string, { badge: string; cls: string; label: string }> = {
     js:   { badge: 'JS',  cls: 'js',   label: 'JavaScript' },
     java: { badge: '☕',  cls: 'java', label: 'Java' },
@@ -741,7 +743,7 @@ const editor = new EditorView({
             keymap.of([indentWithTab]),
             langCompartment.of(javascript({ jsx: true })),
             indentCompartment.of(indentUnit.of('  ')),
-            EditorView.theme({ '&': { fontSize: '13.5px' } }),
+            fontSizeCompartment.of(EditorView.theme({ '&': { fontSize: editorFontSize + 'px' } })),
             EditorView.updateListener.of((update: ViewUpdate) => {
                 if (!update.docChanged || applyingRemote) return
                 if (codeDebounce) clearTimeout(codeDebounce)
@@ -753,6 +755,17 @@ const editor = new EditorView({
     }),
     parent: document.getElementById('editor')!,
 })
+
+// ── Font size (local only, never synced) ──────────────────────────────────────
+function setFontSize(size: number) {
+    editorFontSize = Math.min(22, Math.max(11, size))
+    localStorage.setItem('editor-font-size', String(editorFontSize))
+    editor.dispatch({ effects: fontSizeCompartment.reconfigure(EditorView.theme({ '&': { fontSize: editorFontSize + 'px' } })) })
+    document.getElementById('font-size-label')!.textContent = editorFontSize + 'px'
+}
+document.getElementById('font-size-label')!.textContent = editorFontSize + 'px'
+document.getElementById('font-dec-btn')!.addEventListener('click', () => setFontSize(editorFontSize - 1))
+document.getElementById('font-inc-btn')!.addEventListener('click', () => setFontSize(editorFontSize + 1))
 
 function applyRemoteCode(content: string, lang: string) {
     if (lang !== currentLang) setLang(lang, false)
