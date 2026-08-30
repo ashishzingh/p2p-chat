@@ -18,6 +18,7 @@ public class AdminRoomController {
     private String adminKey;
 
     record TurnCapRequest(String room, int kbps) {}
+    record TurnCapAllRequest(int kbps) {}
 
     @PostMapping("/turn-cap")
     public ResponseEntity<?> setTurnCap(
@@ -28,6 +29,20 @@ public class AdminRoomController {
             signalingHandler.broadcastToRoom(req.room(),
                 Map.of("type", "boss-cmd", "cmd", "set-bitrate-cap", "kbps", req.kbps()));
             return ResponseEntity.ok(Map.of("ok", true, "room", req.room(), "kbps", req.kbps()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/turn-cap-all")
+    public ResponseEntity<?> setTurnCapAll(
+            @RequestHeader("X-Admin-Key") String key,
+            @RequestBody TurnCapAllRequest req) {
+        if (!adminKey.equals(key)) return ResponseEntity.status(403).build();
+        try {
+            int sent = signalingHandler.broadcastToAllRooms(
+                Map.of("type", "boss-cmd", "cmd", "set-bitrate-cap", "kbps", req.kbps()));
+            return ResponseEntity.ok(Map.of("ok", true, "rooms", signalingHandler.activeRoomCount(), "peers", sent, "kbps", req.kbps()));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }

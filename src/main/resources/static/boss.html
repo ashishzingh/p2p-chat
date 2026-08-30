@@ -278,15 +278,23 @@
     <div class="card-title">TURN Relay Cap</div>
     <div class="field-row">
       <label>Room ID</label>
-      <input id="f-cap-room" type="text" placeholder="room name from URL (e.g. abc123)" style="flex:1">
+      <input id="f-cap-room" type="text" placeholder="Leave blank to apply to all rooms" style="flex:1">
     </div>
     <div class="field-row">
-      <label>Max bitrate (kbps)</label>
-      <input id="f-cap-kbps" type="number" value="300" min="0" max="10000" style="width:120px">
-      <span style="color:var(--muted);font-size:13px;margin-left:8px">0 = remove cap</span>
+      <label>Max bitrate</label>
+      <select id="f-cap-kbps" style="flex:1">
+        <option value="150">150 kbps — Emergency (severe congestion)</option>
+        <option value="300" selected>300 kbps — Low (saves TURN bandwidth)</option>
+        <option value="500">500 kbps — Medium (balanced)</option>
+        <option value="800">800 kbps — Good quality</option>
+        <option value="1500">1500 kbps — High quality</option>
+        <option value="2500">2500 kbps — Very high quality</option>
+        <option value="0">No cap (unlimited)</option>
+      </select>
     </div>
     <div class="actions">
-      <button class="btn btn-primary" id="btn-apply-cap">Apply Cap</button>
+      <button class="btn btn-primary" id="btn-apply-cap">Apply to Room</button>
+      <button class="btn btn-primary" id="btn-apply-cap-all">Apply to All Rooms</button>
       <button class="btn btn-secondary" id="btn-remove-cap">Remove Cap</button>
     </div>
     <div class="status" id="cap-status"></div>
@@ -411,18 +419,21 @@
     }
   }
 
-  async function sendCap(kbps) {
+  async function sendCap(kbps, allRooms = false) {
     const room = $('f-cap-room').value.trim()
-    if (!room) { setStatus('cap-status', 'Enter a room ID', 'error'); return }
+    if (!allRooms && !room) { setStatus('cap-status', 'Enter a room ID or use "Apply to All Rooms"', 'error'); return }
+    const endpoint = allRooms ? '/admin/turn-cap-all' : '/admin/turn-cap'
+    const body = allRooms ? { kbps } : { room, kbps }
     try {
-      const res = await fetch('/admin/turn-cap', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key() },
-        body: JSON.stringify({ room, kbps })
+        body: JSON.stringify(body)
       })
       const json = await res.json()
       if (!res.ok) { setStatus('cap-status', `Error: ${json.error || res.status}`, 'error'); return }
-      setStatus('cap-status', kbps > 0 ? `Cap set to ${kbps} kbps for room "${room}"` : `Cap removed for room "${room}"`, 'ok')
+      const target = allRooms ? `all rooms (${json.rooms} active)` : `room "${room}"`
+      setStatus('cap-status', kbps > 0 ? `Cap set to ${kbps} kbps for ${target}` : `Cap removed for ${target}`, 'ok')
     } catch (e) {
       setStatus('cap-status', `Request failed: ${e.message}`, 'error')
     }
@@ -433,6 +444,7 @@
   $('btn-save').addEventListener('click', saveConfig)
   $('btn-disable').addEventListener('click', disableTurn)
   $('btn-apply-cap').addEventListener('click', () => sendCap(parseInt($('f-cap-kbps').value) || 0))
+  $('btn-apply-cap-all').addEventListener('click', () => sendCap(parseInt($('f-cap-kbps').value) || 0, true))
   $('btn-remove-cap').addEventListener('click', () => sendCap(0))
 
   // allow Enter in key field to trigger load

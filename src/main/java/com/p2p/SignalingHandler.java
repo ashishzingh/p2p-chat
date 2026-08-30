@@ -143,6 +143,19 @@ public class SignalingHandler extends TextWebSocketHandler {
         }
     }
 
+    public int broadcastToAllRooms(Object message) throws Exception {
+        String json = mapper.writeValueAsString(message);
+        int count = 0;
+        for (Set<WebSocketSession> sessions : rooms.values()) {
+            for (WebSocketSession s : sessions) {
+                if (s.isOpen()) { safe(s).sendMessage(new TextMessage(json)); count++; }
+            }
+        }
+        return count;
+    }
+
+    public int activeRoomCount() { return rooms.size(); }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void send(WebSocketSession s, Object payload) throws IOException {
