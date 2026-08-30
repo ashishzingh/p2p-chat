@@ -134,6 +134,15 @@ public class SignalingHandler extends TextWebSocketHandler {
         if (roomPeers.isEmpty()) rooms.remove(room);
     }
 
+    // ── Boss broadcast ────────────────────────────────────────────────────────
+
+    public void broadcastToRoom(String room, Object message) throws Exception {
+        String json = mapper.writeValueAsString(message);
+        for (WebSocketSession s : rooms.getOrDefault(room, Set.of())) {
+            if (s.isOpen()) safe(s).sendMessage(new TextMessage(json));
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void send(WebSocketSession s, Object payload) throws IOException {

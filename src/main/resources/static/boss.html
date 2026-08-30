@@ -273,6 +273,25 @@
     <div class="status" id="save-status"></div>
   </div>
 
+  <!-- TURN Relay Cap -->
+  <div class="card">
+    <div class="card-title">TURN Relay Cap</div>
+    <div class="field-row">
+      <label>Room ID</label>
+      <input id="f-cap-room" type="text" placeholder="room name from URL (e.g. abc123)" style="flex:1">
+    </div>
+    <div class="field-row">
+      <label>Max bitrate (kbps)</label>
+      <input id="f-cap-kbps" type="number" value="300" min="0" max="10000" style="width:120px">
+      <span style="color:var(--muted);font-size:13px;margin-left:8px">0 = remove cap</span>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-apply-cap">Apply Cap</button>
+      <button class="btn btn-secondary" id="btn-remove-cap">Remove Cap</button>
+    </div>
+    <div class="status" id="cap-status"></div>
+  </div>
+
   <!-- Raw Response -->
   <div class="card">
     <div class="card-title">Server Response</div>
@@ -392,10 +411,29 @@
     }
   }
 
+  async function sendCap(kbps) {
+    const room = $('f-cap-room').value.trim()
+    if (!room) { setStatus('cap-status', 'Enter a room ID', 'error'); return }
+    try {
+      const res = await fetch('/admin/turn-cap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key() },
+        body: JSON.stringify({ room, kbps })
+      })
+      const json = await res.json()
+      if (!res.ok) { setStatus('cap-status', `Error: ${json.error || res.status}`, 'error'); return }
+      setStatus('cap-status', kbps > 0 ? `Cap set to ${kbps} kbps for room "${room}"` : `Cap removed for room "${room}"`, 'ok')
+    } catch (e) {
+      setStatus('cap-status', `Request failed: ${e.message}`, 'error')
+    }
+  }
+
   $('btn-load').addEventListener('click', loadConfig)
   $('btn-reload').addEventListener('click', loadConfig)
   $('btn-save').addEventListener('click', saveConfig)
   $('btn-disable').addEventListener('click', disableTurn)
+  $('btn-apply-cap').addEventListener('click', () => sendCap(parseInt($('f-cap-kbps').value) || 0))
+  $('btn-remove-cap').addEventListener('click', () => sendCap(0))
 
   // allow Enter in key field to trigger load
   $('admin-key').addEventListener('keydown', e => { if (e.key === 'Enter') loadConfig() })

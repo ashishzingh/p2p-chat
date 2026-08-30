@@ -1705,6 +1705,36 @@ interface PeerState {
 const peers = new Map<string, PeerState>()
 let myId = ''   // assigned by server on join
 
+let turnBitrateCap = 0                  // kbps; 0 = no cap
+const relayPeerIds = new Set<string>()  // peers whose ICE path goes through TURN relay
+
+async function checkIfRelay(pc: RTCPeerConnection, peerId: string) {
+    const stats = await pc.getStats()
+    // RTCStatsReport implements Map in browsers but TS typings omit get()
+    const statsMap = stats as unknown as Map<string, Record<string, unknown>>
+    let isRelay = false
+    stats.forEach(r => {
+        const report = r as unknown as Record<string, unknown>
+        if (report.type === 'candidate-pair' && report.nominated) {
+            const local = statsMap.get(report.localCandidateId as string)
+            if (local?.candidateType === 'relay') isRelay = true
+        }
+    })
+    isRelay ? relayPeerIds.add(peerId) : relayPeerIds.delete(peerId)
+    if (isRelay && turnBitrateCap > 0) applyCapToPeer(peerId, turnBitrateCap)
+}
+
+async function applyCapToPeer(peerId: string, kbps: number) {
+    const state = peers.get(peerId)
+    if (!state) return
+    const sender = state.pc.getSenders().find(s => s.track?.kind === 'video')
+    if (!sender) return
+    const params = sender.getParameters()
+    if (!params.encodings.length) params.encodings = [{}]
+    params.encodings[0].maxBitrate = kbps > 0 ? kbps * 1000 : undefined
+    await sender.setParameters(params)
+}
+
 const STUN_ONLY: RTCConfiguration = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -1877,6 +1907,8 @@ function connectToPeer(peerId: string, isExisting = false) {
                 track('peer_connected', { path: diagState.pairLocalType || 'unknown', force_relay: diagState.forceRelay })
             startStatsPolling()
             pollStats() // immediate update — don't wait for the 2s timer
+            if ((pc.iceConnectionState as string) === 'connected' || (pc.iceConnectionState as string) === 'completed')
+                checkIfRelay(pc, peerId)
         } else {
             // Clear stale path info so display reflects the actual transitioning state
             diagState.pairLocalType  = ''
@@ -1941,6 +1973,7 @@ function removePeer(peerId: string) {
     try { state.pc.close() } catch {}
     state.tileEl.remove()
     peers.delete(peerId)
+    relayPeerIds.delete(peerId)
 
     if (peers.size === 0) {
         msgInput.disabled = true
@@ -2059,6 +2092,12 @@ function connect() {
             } else {
                 state.pending.push(msg.candidate)
             }
+            return
+        }
+
+        if (msg.type === 'boss-cmd' && msg.cmd === 'set-bitrate-cap') {
+            turnBitrateCap = msg.kbps as number
+            for (const pid of relayPeerIds) applyCapToPeer(pid, turnBitrateCap)
             return
         }
     }
