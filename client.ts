@@ -773,8 +773,14 @@ function setLang(lang: string, sendToChannel = true) {
 }
 
 const langPickerEl = document.getElementById('lang-picker')!
+const langMenuEl   = document.getElementById('lang-menu')!
 document.getElementById('lang-picker-btn')!.addEventListener('click', e => {
-    langPickerEl.classList.toggle('open')
+    const open = langPickerEl.classList.toggle('open')
+    if (open) {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+        langMenuEl.style.top  = (rect.bottom + 6) + 'px'
+        langMenuEl.style.left = rect.left + 'px'
+    }
     e.stopPropagation()
 })
 document.querySelectorAll('.lang-option').forEach(btn => {
