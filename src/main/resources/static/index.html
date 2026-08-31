@@ -971,16 +971,15 @@
         .pip-mute-badge {
             position: absolute;
             top: 5px; right: 5px;
-            font-size: .6rem;
-            line-height: 1;
             background: rgba(220,38,38,.82);
             border-radius: 99px;
-            padding: 2px 4px;
-            display: none;
+            padding: 3px 5px;
+            display: none; align-items: center; justify-content: center;
             pointer-events: none;
             box-shadow: 0 1px 4px rgba(0,0,0,.4);
         }
-        .pip-tile.peer-muted .pip-mute-badge { display: block; }
+        .pip-mute-badge svg { width: 10px; height: 10px; stroke: #fff; }
+        .pip-tile.peer-muted .pip-mute-badge { display: flex; }
 
         /* ── PIP in-frame controls (local tile only) ── */
         .pip-tile-controls {
@@ -1004,12 +1003,11 @@
             background: rgba(0,0,0,.65);
             backdrop-filter: blur(6px);
             color: #fff;
-            font-size: .82rem;
             cursor: pointer;
             display: flex; align-items: center; justify-content: center;
             transition: background .15s, transform .1s;
-            line-height: 1;
         }
+        .pip-ctrl-btn svg { width: 13px; height: 13px; stroke: #fff; stroke-width: 2.5; }
         .pip-ctrl-btn:hover:not(:disabled) { background: rgba(0,0,0,.9); transform: scale(1.12); }
         .pip-ctrl-btn:disabled { opacity: .35; cursor: default; }
         .pip-ctrl-btn.off { background: rgba(210,30,30,.75); }
@@ -1501,8 +1499,8 @@
             <video id="local-video" autoplay muted playsinline></video>
             <div class="pip-no-cam"><div class="pip-avatar" id="local-avatar">?</div></div>
             <div class="pip-tile-controls">
-                <button class="pip-ctrl-btn off" id="pip-cam-btn" title="Camera on/off">📷</button>
-                <button class="pip-ctrl-btn off" id="pip-mic-btn" title="Mute/Unmute">🎤</button>
+                <button class="pip-ctrl-btn off" id="pip-cam-btn" title="Camera on/off"></button>
+                <button class="pip-ctrl-btn off" id="pip-mic-btn" title="Mute/Unmute"></button>
             </div>
             <div class="pip-name-bar" id="local-label">You</div>
         </div>
@@ -1533,6 +1531,6 @@
     <button id="toast-close">✕</button>
 </div>
 
-<script type="module" src="client.js?v=24"></script>
+<script type="module" src="client.js?v=25"></script>
 </body>
 </html>

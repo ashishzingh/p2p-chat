@@ -41,6 +41,8 @@ document.getElementById('audio-icon')!.innerHTML  = SVG.micOff
 document.getElementById('video-icon')!.innerHTML  = SVG.camOff
 document.getElementById('theme-icon')!.innerHTML  = SVG.moon
 document.getElementById('screen-icon')!.innerHTML = SVG.screen
+document.getElementById('pip-cam-btn')!.innerHTML = SVG.camOff
+document.getElementById('pip-mic-btn')!.innerHTML = SVG.micOff
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -1587,7 +1589,7 @@ const pipMicBtn  = document.getElementById('pip-mic-btn') as HTMLButtonElement
 function setCamOn(on: boolean) {
     document.getElementById('video-icon')!.innerHTML = on ? SVG.camOn : SVG.camOff
     toggleVideoBtn.classList.toggle('active', on)
-    pipCamBtn.textContent = on ? '📹' : '📷'
+    pipCamBtn.innerHTML = on ? SVG.camOn : SVG.camOff
     pipCamBtn.classList.toggle('off', !on)
     document.getElementById('pip-local')!.classList.toggle('cam-on', on)
 }
@@ -1597,7 +1599,7 @@ function setMicMuted(muted: boolean) {
     document.getElementById('audio-icon')!.innerHTML = muted ? SVG.micOff : SVG.micOn
     document.getElementById('audio-label')!.textContent = muted ? 'Unmute' : 'Mute'
     toggleAudioBtn.classList.toggle('active', !muted)  // active = mic is live, not muted
-    pipMicBtn.textContent = muted ? '🔇' : '🎤'
+    pipMicBtn.innerHTML = muted ? SVG.micOff : SVG.micOn
     pipMicBtn.classList.toggle('off', muted)
 }
 
@@ -1607,7 +1609,7 @@ function resetMicUI() {
     document.getElementById('audio-icon')!.innerHTML = SVG.micOff
     document.getElementById('audio-label')!.textContent = 'Mic'
     toggleAudioBtn.classList.remove('active')
-    pipMicBtn.textContent = '🎤'
+    pipMicBtn.innerHTML = SVG.micOff
     pipMicBtn.classList.add('off')
 }
 
@@ -1892,7 +1894,7 @@ function createPeerTile(peerId: string): { tileEl: HTMLDivElement; videoEl: HTML
 
     const muteBadge = document.createElement('div')
     muteBadge.className = 'pip-mute-badge'
-    muteBadge.textContent = '🔇'
+    muteBadge.innerHTML = SVG.micOff
     tileEl.appendChild(muteBadge)
 
     const nameBar = document.createElement('div')
