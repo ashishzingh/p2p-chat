@@ -37,7 +37,7 @@ const SVG = {
 // Initialize icon spans once DOM is ready
 document.getElementById('leave-icon')!.innerHTML  = SVG.leave
 document.getElementById('chat-icon')!.innerHTML   = SVG.chat
-document.getElementById('audio-icon')!.innerHTML  = SVG.micOn
+document.getElementById('audio-icon')!.innerHTML  = SVG.micOff
 document.getElementById('video-icon')!.innerHTML  = SVG.camOff
 document.getElementById('theme-icon')!.innerHTML  = SVG.moon
 document.getElementById('screen-icon')!.innerHTML = SVG.screen
@@ -1070,6 +1070,7 @@ document.getElementById('disconnect-btn')!.addEventListener('click', () => {
     localStream = null
     localMicStream?.getTracks().forEach(t => t.stop())
     localMicStream = null
+    resetMicUI()
     // Navigate back to home
     location.href = '/'
 })
@@ -1600,6 +1601,16 @@ function setMicMuted(muted: boolean) {
     pipMicBtn.classList.toggle('off', muted)
 }
 
+/** Reset mic button to "no stream" state — shown before mic is first enabled */
+function resetMicUI() {
+    micMuted = false
+    document.getElementById('audio-icon')!.innerHTML = SVG.micOff
+    document.getElementById('audio-label')!.textContent = 'Mic'
+    toggleAudioBtn.classList.remove('active')
+    pipMicBtn.textContent = '🎤'
+    pipMicBtn.classList.add('off')
+}
+
 async function toggleCamera() {
     if (!localStream) {
         try {
@@ -2038,7 +2049,7 @@ function resetPeerState() {
     for (const peerId of [...peers.keys()]) removePeer(peerId)
     localMicStream?.getTracks().forEach(t => t.stop())
     localMicStream = null
-    setMicMuted(false)
+    resetMicUI()
     msgInput.disabled = true
     sendBtn.disabled  = true
     stopStatsPolling()
