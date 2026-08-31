@@ -1586,6 +1586,8 @@ function setCamOn(on: boolean) {
     pipCamBtn.textContent = on ? '📹' : '📷'
     pipCamBtn.classList.toggle('off', !on)
     document.getElementById('pip-local')!.classList.toggle('cam-on', on)
+    toggleAudioBtn.disabled = !on
+    pipMicBtn.disabled = !on
 }
 
 function setMicMuted(muted: boolean) {
@@ -1620,12 +1622,6 @@ async function toggleCamera() {
         } catch { appendMessage('system', 'Camera/mic access denied') }
     } else {
         if (screenStream) stopScreenShare()
-        for (const { pc } of peers.values()) {
-            if (pc.connectionState === 'closed') continue
-            for (const sender of pc.getSenders()) {
-                sender.replaceTrack(null).catch(() => {})
-            }
-        }
         localStream.getTracks().forEach(t => t.stop())
         localStream = null
         localVideo.srcObject = null
@@ -1979,18 +1975,16 @@ function connectToPeer(peerId: string, isExisting = false) {
         else pc.addTrack(screenTrack, screenStream!)
     }
 
-    // Both sides can renegotiate — needed so either peer can add tracks after connection
-    pc.onnegotiationneeded = async () => {
-        try {
-            await pc.setLocalDescription()
-            ws.send(JSON.stringify({ type: 'offer', to: peerId, sdp: pc.localDescription }))
-        } catch (e) { console.warn('offer failed', e) }
-    }
-
-    // Smaller ID creates the data channel — prevents both sides creating one simultaneously
+    // Smaller ID initiates the offer — no coin-flip or negotiation needed
     if (myId < peerId) {
         const ch = pc.createDataChannel('main')
         setupDataChannel(ch, peerId)
+        pc.onnegotiationneeded = async () => {
+            try {
+                await pc.setLocalDescription()
+                ws.send(JSON.stringify({ type: 'offer', to: peerId, sdp: pc.localDescription }))
+            } catch (e) { console.warn('offer failed', e) }
+        }
     }
 }
 
