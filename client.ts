@@ -440,7 +440,7 @@ function generateRoomId(): string {
 function showJoinScreen(roomId: string) {
     room = roomId
     location.hash = roomId
-    ;(document.getElementById('room-name') as HTMLElement).textContent = roomId
+    ;(document.getElementById('chip-room') as HTMLElement).textContent = roomId
     joinRoomDisplay.textContent = roomId
     homeScreen.style.display = 'none'
     joinScreen.classList.add('visible')

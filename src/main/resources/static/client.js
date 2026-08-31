@@ -26829,7 +26829,7 @@ function yU() {
   return `${s(i)}-${s(e)}-${t}`;
 }
 function Gd(i) {
-  Ml = i, location.hash = i, document.getElementById("room-name").textContent = i, PU.textContent = i, By.style.display = "none", _u.classList.add("visible"), yo.focus();
+  Ml = i, location.hash = i, document.getElementById("chip-room").textContent = i, PU.textContent = i, By.style.display = "none", _u.classList.add("visible"), yo.focus();
 }
 $U.addEventListener("click", () => Gd(yU()));
 Fy.addEventListener("click", () => {
