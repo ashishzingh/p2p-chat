@@ -691,9 +691,11 @@ document.getElementById('room-chip')!.addEventListener('click', () => {
     })
 })
 
+let _audioCtx: AudioContext | null = null
 function playPing() {
     try {
-        const ctx = new AudioContext()
+        if (!_audioCtx || _audioCtx.state === 'closed') _audioCtx = new AudioContext()
+        const ctx = _audioCtx
         const o = ctx.createOscillator()
         const g = ctx.createGain()
         o.connect(g); g.connect(ctx.destination)
@@ -855,6 +857,8 @@ async function runWithWandbox(code: string, lang: string): Promise<{ output: str
     } else if (lang === 'c') {
         compiler = 'gcc-head'
         compilerOptionRaw = '-x c'
+    } else if (lang === 'cpp') {
+        compiler = 'g++-head'
     } else {
         compiler = 'gcc-head'
     }
@@ -1899,11 +1903,12 @@ function connectToPeer(peerId: string, isExisting = false) {
             states.includes('checking')     ? 'checking'     :
             states.includes('disconnected') ? 'disconnected' :
             states.includes('failed')       ? 'failed'       : 'new'
+        const prevIceState = diagState.iceState
         diagState.iceState = best
         if (best === 'checking' && !diagState.iceCheckingStart) diagState.iceCheckingStart = Date.now()
         if (best !== 'checking') diagState.iceCheckingStart = 0
         if (best === 'connected' || best === 'completed') {
-            if (diagState.iceState !== 'connected' && diagState.iceState !== 'completed')
+            if (prevIceState !== 'connected' && prevIceState !== 'completed')
                 track('peer_connected', { path: diagState.pairLocalType || 'unknown', force_relay: diagState.forceRelay })
             startStatsPolling()
             pollStats() // immediate update — don't wait for the 2s timer
@@ -1988,7 +1993,6 @@ function removePeer(peerId: string) {
 
 function resetPeerState() {
     for (const peerId of [...peers.keys()]) removePeer(peerId)
-    peers.clear()
     msgInput.disabled = true
     sendBtn.disabled  = true
     stopStatsPolling()

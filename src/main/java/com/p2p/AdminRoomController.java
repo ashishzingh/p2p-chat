@@ -24,7 +24,7 @@ public class AdminRoomController {
     public ResponseEntity<?> setTurnCap(
             @RequestHeader("X-Admin-Key") String key,
             @RequestBody TurnCapRequest req) {
-        if (!adminKey.equals(key)) return ResponseEntity.status(403).build();
+        if (!adminKey.equals(key)) return ResponseEntity.status(401).build();
         try {
             signalingHandler.broadcastToRoom(req.room(),
                 Map.of("type", "boss-cmd", "cmd", "set-bitrate-cap", "kbps", req.kbps()));
@@ -38,7 +38,7 @@ public class AdminRoomController {
     public ResponseEntity<?> setTurnCapAll(
             @RequestHeader("X-Admin-Key") String key,
             @RequestBody TurnCapAllRequest req) {
-        if (!adminKey.equals(key)) return ResponseEntity.status(403).build();
+        if (!adminKey.equals(key)) return ResponseEntity.status(401).build();
         try {
             int sent = signalingHandler.broadcastToAllRooms(
                 Map.of("type", "boss-cmd", "cmd", "set-bitrate-cap", "kbps", req.kbps()));
