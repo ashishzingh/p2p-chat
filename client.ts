@@ -1685,6 +1685,7 @@ async function toggleScreen() {
         toggleScreenBtn.classList.add('active')
         toggleVideoBtn.disabled = true
 
+        sendData({ source: 'cam-state', on: true })   // replaceTrack doesn't fire ontrack — tell peers explicitly
         appendMessage('system', `${myName} started screen sharing`)
         track('screen_share_started', {})
 
@@ -1718,6 +1719,7 @@ function stopScreenShare() {
     toggleScreenBtn.classList.remove('active')
     toggleVideoBtn.disabled = false
 
+    sendData({ source: 'cam-state', on: !!localStream })  // tell peers camera is now off if no stream
     appendMessage('system', `${myName} stopped screen sharing`)
     track('screen_share_stopped', {})
 }
