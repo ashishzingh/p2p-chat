@@ -27058,7 +27058,7 @@ function Bn(i, e = !1, t = !1) {
 const kU = "https://wandbox.org/api/compile.json";
 async function TU(i, e) {
   let t, s;
-  e === "java" ? t = "openjdk-head" : e === "c" ? (t = "gcc-head", s = "-x c") : e === "cpp" ? t = "g++-head" : t = "gcc-head";
+  e === "java" ? t = "openjdk-jdk-22+36" : e === "c" ? (t = "gcc-head", s = "-x c") : e === "cpp" ? t = "g++-head" : t = "gcc-head";
   const r = e === "java" ? (() => {
     const u = i.match(/(?:public\s+)?class\s+(\w+)/);
     return u ? `${u[1]}.java` : "Main.java";

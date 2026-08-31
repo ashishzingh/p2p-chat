@@ -853,7 +853,7 @@ async function runWithWandbox(code: string, lang: string): Promise<{ output: str
     let compilerOptionRaw: string | undefined
 
     if (lang === 'java') {
-        compiler = 'openjdk-head'
+        compiler = 'openjdk-jdk-22+36'
     } else if (lang === 'c') {
         compiler = 'gcc-head'
         compilerOptionRaw = '-x c'
