@@ -41,8 +41,6 @@ document.getElementById('audio-icon')!.innerHTML  = SVG.micOff
 document.getElementById('video-icon')!.innerHTML  = SVG.camOff
 document.getElementById('theme-icon')!.innerHTML  = SVG.moon
 document.getElementById('screen-icon')!.innerHTML = SVG.screen
-document.getElementById('pip-cam-btn')!.innerHTML = SVG.camOff
-document.getElementById('pip-mic-btn')!.innerHTML = SVG.micOff
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -353,6 +351,26 @@ async function pollStats() {
         }
     } catch { /* getStats may fail if PC is closing */ }
     updateDiagnosticsUI()
+
+    // Per-peer connection quality badges
+    for (const [peerId, { pc }] of peers) {
+        if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') continue
+        try {
+            let lost = 0, received = 0
+            const peerStats = await pc.getStats()
+            peerStats.forEach((r: RTCStats) => {
+                const rep = r as Record<string, unknown>
+                if (r.type === 'inbound-rtp' && rep['kind'] === 'video') {
+                    lost     += (rep['packetsLost']     as number) ?? 0
+                    received += (rep['packetsReceived'] as number) ?? 0
+                }
+            })
+            const lossRate = (lost + received) > 0 ? lost / (lost + received) : 0
+            const bars = lossRate < 0.02 ? 3 : lossRate < 0.08 ? 2 : 1
+            const badge = document.querySelector(`#pip-tile-${peerId} .quality-badge`)
+            if (badge) badge.className = `quality-badge q${bars}`
+        } catch {}
+    }
 }
 
 let statsTimer: ReturnType<typeof setInterval> | null = null
@@ -1583,14 +1601,9 @@ const localVideo     = document.getElementById('local-video') as HTMLVideoElemen
 const toggleVideoBtn = document.getElementById('toggle-video') as HTMLButtonElement
 const toggleAudioBtn = document.getElementById('toggle-audio') as HTMLButtonElement
 const toggleScreenBtn = document.getElementById('toggle-screen') as HTMLButtonElement
-const pipCamBtn  = document.getElementById('pip-cam-btn') as HTMLButtonElement
-const pipMicBtn  = document.getElementById('pip-mic-btn') as HTMLButtonElement
-
 function setCamOn(on: boolean) {
     document.getElementById('video-icon')!.innerHTML = on ? SVG.camOn : SVG.camOff
     toggleVideoBtn.classList.toggle('active', on)
-    pipCamBtn.innerHTML = on ? SVG.camOn : SVG.camOff
-    pipCamBtn.classList.toggle('off', !on)
     document.getElementById('pip-local')!.classList.toggle('cam-on', on)
 }
 
@@ -1599,8 +1612,6 @@ function setMicMuted(muted: boolean) {
     document.getElementById('audio-icon')!.innerHTML = muted ? SVG.micOff : SVG.micOn
     document.getElementById('audio-label')!.textContent = muted ? 'Unmute' : 'Mute'
     toggleAudioBtn.classList.toggle('active', !muted)  // active = mic is live, not muted
-    pipMicBtn.innerHTML = muted ? SVG.micOff : SVG.micOn
-    pipMicBtn.classList.toggle('off', muted)
 }
 
 /** Reset mic button to "no stream" state — shown before mic is first enabled */
@@ -1609,8 +1620,7 @@ function resetMicUI() {
     document.getElementById('audio-icon')!.innerHTML = SVG.micOff
     document.getElementById('audio-label')!.textContent = 'Mic'
     toggleAudioBtn.classList.remove('active')
-    pipMicBtn.innerHTML = SVG.micOff
-    pipMicBtn.classList.add('off')
+    stopLocalSpeaking()
 }
 
 async function toggleCamera() {
@@ -1647,6 +1657,8 @@ async function toggleMic() {
         try {
             localMicStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
             setMicMuted(false)
+            setupSpeaking(localMicStream.getAudioTracks()[0], 'local',
+                document.getElementById('pip-local')!)
             for (const { pc } of peers.values()) {
                 if (pc.connectionState === 'closed') continue
                 const audioTrack = localMicStream.getAudioTracks()[0]
@@ -1729,8 +1741,6 @@ function stopScreenShare() {
 toggleVideoBtn.addEventListener('click', toggleCamera)
 toggleAudioBtn.addEventListener('click', toggleMic)
 toggleScreenBtn.addEventListener('click', toggleScreen)
-pipCamBtn.addEventListener('click', toggleCamera)
-pipMicBtn.addEventListener('click', toggleMic)
 
 // ── WebRTC — full-mesh multi-peer ─────────────────────────────────────────────
 
@@ -1751,6 +1761,62 @@ let myId = ''   // assigned by server on join
 
 let turnBitrateCap = 0                  // kbps; 0 = no cap
 const relayPeerIds = new Set<string>()  // peers whose ICE path goes through TURN relay
+
+// ── Speaking detection ────────────────────────────────────────────────────────
+
+let speakingAudioCtx: AudioContext | null = null
+const speakingAnalysers = new Map<string, { analyser: AnalyserNode; data: Uint8Array; el: HTMLElement }>()
+let speakingTimer: ReturnType<typeof setInterval> | null = null
+
+function getOrCreateSpeakingCtx(): AudioContext {
+    if (!speakingAudioCtx || speakingAudioCtx.state === 'closed')
+        speakingAudioCtx = new AudioContext()
+    return speakingAudioCtx
+}
+
+function setupSpeaking(track: MediaStreamTrack, id: string, tileEl: HTMLElement) {
+    try {
+        const ctx = getOrCreateSpeakingCtx()
+        const source = ctx.createMediaStreamSource(new MediaStream([track]))
+        const analyser = ctx.createAnalyser()
+        analyser.fftSize = 128
+        source.connect(analyser)
+        const data = new Uint8Array(analyser.frequencyBinCount)
+        speakingAnalysers.set(id, { analyser, data, el: tileEl })
+        if (!speakingTimer)
+            speakingTimer = setInterval(() => {
+                for (const { analyser, data, el } of speakingAnalysers.values()) {
+                    analyser.getByteFrequencyData(data)
+                    const avg = data.reduce((a, b) => a + b, 0) / data.length
+                    el.classList.toggle('speaking', avg > 10)
+                }
+            }, 100)
+    } catch { /* audio context may be blocked */ }
+}
+
+function cleanupSpeaking(id: string) {
+    speakingAnalysers.delete(id)
+    if (speakingAnalysers.size === 0 && speakingTimer) {
+        clearInterval(speakingTimer); speakingTimer = null
+    }
+}
+
+function stopLocalSpeaking() {
+    cleanupSpeaking('local')
+    document.getElementById('pip-local')?.classList.remove('speaking')
+}
+
+// ── PIP grid layout ───────────────────────────────────────────────────────────
+
+function updatePipLayout() {
+    const container = document.getElementById('pip-container') as HTMLElement
+    const tilesEl   = document.getElementById('pip-tiles') as HTMLElement
+    const count     = document.querySelectorAll('#pip-tiles .pip-tile').length
+    const hasSpotlit = !!tilesEl.querySelector('.pip-tile.spotlit')
+    const cols = (!hasSpotlit && count >= 2) ? 2 : 1
+    container.style.width = `${cols * 178}px`
+    tilesEl.style.gridTemplateColumns = cols === 2 ? '1fr 1fr' : '1fr'
+}
 
 async function checkIfRelay(pc: RTCPeerConnection, peerId: string) {
     const stats = await pc.getStats()
@@ -1897,13 +1963,32 @@ function createPeerTile(peerId: string): { tileEl: HTMLDivElement; videoEl: HTML
     muteBadge.innerHTML = SVG.micOff
     tileEl.appendChild(muteBadge)
 
+    const qualityBadge = document.createElement('div')
+    qualityBadge.className = 'quality-badge q3'
+    qualityBadge.innerHTML = '<span class="qbar"></span><span class="qbar"></span><span class="qbar"></span>'
+    tileEl.appendChild(qualityBadge)
+
     const nameBar = document.createElement('div')
     nameBar.className = 'pip-name-bar'
     nameBar.id = `pip-name-${peerId}`
     nameBar.textContent = 'Peer'
     tileEl.appendChild(nameBar)
 
+    // Double-click to spotlight / unspotlight this peer
+    tileEl.title = 'Double-click to spotlight'
+    tileEl.addEventListener('dblclick', () => {
+        const wasSpotlit = tileEl.classList.contains('spotlit')
+        document.querySelectorAll('#pip-tiles .pip-tile').forEach(t => t.classList.remove('spotlit'))
+        document.getElementById('pip-container')?.classList.remove('has-spotlit')
+        if (!wasSpotlit) {
+            tileEl.classList.add('spotlit')
+            document.getElementById('pip-container')?.classList.add('has-spotlit')
+        }
+        updatePipLayout()
+    })
+
     document.getElementById('pip-tiles')!.appendChild(tileEl)
+    updatePipLayout()
     return { tileEl, videoEl }
 }
 
@@ -1981,10 +2066,10 @@ function connectToPeer(peerId: string, isExisting = false) {
         if (e.track.kind === 'video') {
             tileEl.classList.add('cam-on')
             videoEl.play().catch(() => {
-                // mobile browsers block autoplay — tap the tile to start
                 tileEl.classList.add('needs-play')
             })
         }
+        if (e.track.kind === 'audio') setupSpeaking(e.track, peerId, tileEl)
     }
     tileEl.addEventListener('click', () => {
         videoEl.play().catch(() => {})
@@ -2037,6 +2122,8 @@ function removePeer(peerId: string) {
     state.tileEl.remove()
     peers.delete(peerId)
     relayPeerIds.delete(peerId)
+    cleanupSpeaking(peerId)
+    updatePipLayout()
 
     if (peers.size === 0) {
         msgInput.disabled = true

@@ -942,18 +942,21 @@
         #pip-collapse-btn:hover { color: rgba(255,255,255,.85); background: rgba(255,255,255,.1); }
         body.light #pip-collapse-btn:hover { color: rgba(0,0,0,.7); background: rgba(0,0,0,.06); }
 
-        #pip-tiles { display: flex; flex-direction: column; }
+        #pip-tiles { display: grid; grid-template-columns: 1fr; }
         #pip-container.collapsed #pip-tiles { display: none; }
 
         .pip-tile {
             position: relative;
-            width: 178px;
-            height: 120px;
+            width: 100%; height: 120px;
             overflow: hidden;
             background: rgba(0,0,0,.45);
+            outline: 2px solid transparent;
+            outline-offset: -2px;
+            transition: outline-color .12s, height .2s;
         }
         .pip-tile + .pip-tile { border-top: 1px solid rgba(255,255,255,.07); }
         body.light .pip-tile + .pip-tile { border-top-color: rgba(0,0,0,.08); }
+        .pip-tile.speaking { outline-color: var(--green); }
 
         .pip-tile video {
             width: 100%; height: 100%;
@@ -963,6 +966,7 @@
             transition: opacity .35s;
         }
         .pip-tile.cam-on video { opacity: 1; }
+        #pip-local video { transform: scaleX(-1); }  /* mirror self-view like a webcam */
 
         .pip-no-cam {
             position: absolute;
@@ -1012,36 +1016,26 @@
         .pip-mute-badge svg { width: 10px; height: 10px; stroke: #fff; }
         .pip-tile.peer-muted .pip-mute-badge { display: flex; }
 
-        /* ── PIP in-frame controls (local tile only) ── */
-        .pip-tile-controls {
-            position: absolute;
-            bottom: 24px; left: 0; right: 0;
-            display: flex;
-            justify-content: center;
-            gap: 7px;
-            opacity: 0;
-            transition: opacity .2s;
-            pointer-events: none;
+        /* ── Quality badge ── */
+        .quality-badge {
+            position: absolute; top: 5px; left: 5px;
+            display: flex; gap: 1.5px; align-items: flex-end;
+            background: rgba(0,0,0,.55); padding: 3px 4px; border-radius: 4px;
         }
-        #pip-local:hover .pip-tile-controls {
-            opacity: 1;
-            pointer-events: all;
-        }
-        .pip-ctrl-btn {
-            width: 30px; height: 30px;
-            border-radius: 50%;
-            border: none;
-            background: rgba(0,0,0,.65);
-            backdrop-filter: blur(6px);
-            color: #fff;
-            cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-            transition: background .15s, transform .1s;
-        }
-        .pip-ctrl-btn svg { width: 13px; height: 13px; stroke: #fff; stroke-width: 2.5; }
-        .pip-ctrl-btn:hover:not(:disabled) { background: rgba(0,0,0,.9); transform: scale(1.12); }
-        .pip-ctrl-btn:disabled { opacity: .35; cursor: default; }
-        .pip-ctrl-btn.off { background: rgba(210,30,30,.75); }
+        .qbar { width: 3px; border-radius: 1px; background: var(--green); }
+        .qbar:nth-child(1) { height: 5px; }
+        .qbar:nth-child(2) { height: 8px; }
+        .qbar:nth-child(3) { height: 11px; }
+        .quality-badge.q2 .qbar:nth-child(3) { background: var(--bg-3); }
+        .quality-badge.q1 .qbar:nth-child(2),
+        .quality-badge.q1 .qbar:nth-child(3) { background: var(--bg-3); }
+        .quality-badge.q1 .qbar:nth-child(1) { background: var(--red); }
+        .quality-badge.q2 .qbar:nth-child(1) { background: var(--yellow); }
+
+        /* ── Spotlight ── */
+        #pip-container.has-spotlit { width: 356px !important; }
+        .pip-tile.spotlit { grid-column: 1 / -1; height: 200px; order: -1; }
+        #pip-tiles:has(.spotlit) .pip-tile:not(.spotlit) { height: 80px; }
 
         /* ── Chat drawer ── */
         #chat-backdrop {
@@ -1211,8 +1205,8 @@
             .logo-text { display: none; }
             #room-chip { max-width: 140px; }
             #chip-label { display: none; }
-            #pip-container { bottom: 14px; left: 10px; width: 140px; }
-            .pip-tile { width: 140px; height: 94px; }
+            #pip-container { bottom: 14px; left: 10px; width: 140px !important; }
+            .pip-tile { height: 94px; }
             #chat-drawer { width: 100vw; top: 50px; }
             .tab { padding: 5px 11px; font-size: .73rem; }
             #tabs-wrap { padding: 7px 10px 0; }
@@ -1533,10 +1527,6 @@
         <div class="pip-tile" id="pip-local">
             <video id="local-video" autoplay muted playsinline></video>
             <div class="pip-no-cam"><div class="pip-avatar" id="local-avatar">?</div></div>
-            <div class="pip-tile-controls">
-                <button class="pip-ctrl-btn off" id="pip-cam-btn" title="Camera on/off"></button>
-                <button class="pip-ctrl-btn off" id="pip-mic-btn" title="Mute/Unmute"></button>
-            </div>
             <div class="pip-name-bar" id="local-label">You</div>
         </div>
         <!-- remote peer tiles are added here dynamically by client.ts -->
@@ -1566,6 +1556,6 @@
     <button id="toast-close">✕</button>
 </div>
 
-<script type="module" src="client.js?v=26"></script>
+<script type="module" src="client.js?v=27"></script>
 </body>
 </html>
