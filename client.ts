@@ -564,7 +564,7 @@ function applyTheme(name: ThemeName) {
 }
 
 const saved = localStorage.getItem('theme') as ThemeName
-applyTheme(saved in THEMES ? saved : 'batman')
+applyTheme(saved in THEMES ? saved : 'nikki')
 
 document.getElementById('theme-picker-btn')!.addEventListener('click', e => {
     themePickerEl.classList.toggle('open')

@@ -26896,7 +26896,7 @@ function Jy(i) {
   }), localStorage.setItem("theme", i);
 }
 const Rm = localStorage.getItem("theme");
-Jy(Rm in Ky ? Rm : "batman");
+Jy(Rm in Ky ? Rm : "nikki");
 document.getElementById("theme-picker-btn").addEventListener("click", (i) => {
   Fd.classList.toggle("open"), i.stopPropagation();
 });
