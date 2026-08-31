@@ -1586,9 +1586,6 @@ function setCamOn(on: boolean) {
     pipCamBtn.textContent = on ? '📹' : '📷'
     pipCamBtn.classList.toggle('off', !on)
     document.getElementById('pip-local')!.classList.toggle('cam-on', on)
-    const micEnabled = on
-    toggleAudioBtn.disabled = !micEnabled
-    pipMicBtn.disabled = !micEnabled
 }
 
 function setMicMuted(muted: boolean) {
@@ -1606,7 +1603,9 @@ async function toggleCamera() {
             localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
             localVideo.srcObject = localStream
             setCamOn(true)
-            setMicMuted(false)
+            // restore previous mic mute state — new stream has audio enabled by default
+            localStream.getAudioTracks().forEach(t => { t.enabled = !micMuted })
+            setMicMuted(micMuted)
             track('camera_toggled', { on: true })
             sendData({ source: 'cam-state', on: true })
             for (const { pc } of peers.values()) {
@@ -1621,6 +1620,12 @@ async function toggleCamera() {
         } catch { appendMessage('system', 'Camera/mic access denied') }
     } else {
         if (screenStream) stopScreenShare()
+        for (const { pc } of peers.values()) {
+            if (pc.connectionState === 'closed') continue
+            for (const sender of pc.getSenders()) {
+                sender.replaceTrack(null).catch(() => {})
+            }
+        }
         localStream.getTracks().forEach(t => t.stop())
         localStream = null
         localVideo.srcObject = null
@@ -1662,8 +1667,15 @@ async function toggleScreen() {
         track('screen_share_started', {})
 
         screenTrack.onended = () => stopScreenShare()
-    } catch {
+    } catch (e: unknown) {
         screenStream = null
+        const err = e instanceof Error ? e : null
+        const msg = err?.name === 'NotAllowedError'
+            ? 'Screen share permission denied'
+            : typeof navigator.mediaDevices?.getDisplayMedia !== 'function'
+                ? 'Screen sharing is not supported on this device'
+                : 'Could not start screen share'
+        appendMessage('system', msg)
     }
 }
 
@@ -1928,7 +1940,7 @@ function connectToPeer(peerId: string, isExisting = false) {
         updateDiagnosticsUI()
     }
 
-    pc.onicegatheringchange = () => {
+    pc.onicegatheringstatechange = () => {
         // New gathering round — clear stale candidates so display reflects fresh state
         if (pc.iceGatheringState === 'gathering') diagState.localCandidates = []
         diagState.gatheringState = pc.iceGatheringState
@@ -1938,8 +1950,18 @@ function connectToPeer(peerId: string, isExisting = false) {
     pc.ontrack = e => {
         if (!videoEl.srcObject) videoEl.srcObject = new MediaStream()
         ;(videoEl.srcObject as MediaStream).addTrack(e.track)
-        tileEl.classList.add('cam-on')
+        if (e.track.kind === 'video') {
+            tileEl.classList.add('cam-on')
+            videoEl.play().catch(() => {
+                // mobile browsers block autoplay — tap the tile to start
+                tileEl.classList.add('needs-play')
+            })
+        }
     }
+    tileEl.addEventListener('click', () => {
+        videoEl.play().catch(() => {})
+        tileEl.classList.remove('needs-play')
+    }, { once: true })
 
     pc.ondatachannel = e => setupDataChannel(e.channel, peerId)
 
@@ -1957,16 +1979,18 @@ function connectToPeer(peerId: string, isExisting = false) {
         else pc.addTrack(screenTrack, screenStream!)
     }
 
-    // Smaller ID initiates the offer — no coin-flip or negotiation needed
+    // Both sides can renegotiate — needed so either peer can add tracks after connection
+    pc.onnegotiationneeded = async () => {
+        try {
+            await pc.setLocalDescription()
+            ws.send(JSON.stringify({ type: 'offer', to: peerId, sdp: pc.localDescription }))
+        } catch (e) { console.warn('offer failed', e) }
+    }
+
+    // Smaller ID creates the data channel — prevents both sides creating one simultaneously
     if (myId < peerId) {
         const ch = pc.createDataChannel('main')
         setupDataChannel(ch, peerId)
-        pc.onnegotiationneeded = async () => {
-            try {
-                await pc.setLocalDescription()
-                ws.send(JSON.stringify({ type: 'offer', to: peerId, sdp: pc.localDescription }))
-            } catch (e) { console.warn('offer failed', e) }
-        }
     }
 }
 
