@@ -1596,7 +1596,7 @@ function setMicMuted(muted: boolean) {
     micMuted = muted
     document.getElementById('audio-icon')!.innerHTML = muted ? SVG.micOff : SVG.micOn
     document.getElementById('audio-label')!.textContent = muted ? 'Unmute' : 'Mute'
-    toggleAudioBtn.classList.toggle('active', muted)
+    toggleAudioBtn.classList.toggle('active', !muted)  // active = mic is live, not muted
     pipMicBtn.textContent = muted ? '🔇' : '🎤'
     pipMicBtn.classList.toggle('off', muted)
 }

@@ -27516,7 +27516,7 @@ function Em(i) {
   document.getElementById("video-icon").innerHTML = i ? Ft.camOn : Ft.camOff, xO.classList.toggle("active", i), Tu.textContent = i ? "📹" : "📷", Tu.classList.toggle("off", !i), document.getElementById("pip-local").classList.toggle("cam-on", i);
 }
 function Vm(i) {
-  Kd = i, document.getElementById("audio-icon").innerHTML = i ? Ft.micOff : Ft.micOn, document.getElementById("audio-label").textContent = i ? "Unmute" : "Mute", Jd.classList.toggle("active", i), So.textContent = i ? "🔇" : "🎤", So.classList.toggle("off", i);
+  Kd = i, document.getElementById("audio-icon").innerHTML = i ? Ft.micOff : Ft.micOn, document.getElementById("audio-label").textContent = i ? "Unmute" : "Mute", Jd.classList.toggle("active", !i), So.textContent = i ? "🔇" : "🎤", So.classList.toggle("off", i);
 }
 function gP() {
   Kd = !1, document.getElementById("audio-icon").innerHTML = Ft.micOff, document.getElementById("audio-label").textContent = "Mic", Jd.classList.remove("active"), So.textContent = "🎤", So.classList.add("off");
