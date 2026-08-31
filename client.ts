@@ -1068,6 +1068,8 @@ document.getElementById('disconnect-btn')!.addEventListener('click', () => {
     if (screenStream) stopScreenShare()
     localStream?.getTracks().forEach(t => t.stop())
     localStream = null
+    localMicStream?.getTracks().forEach(t => t.stop())
+    localMicStream = null
     // Navigate back to home
     location.href = '/'
 })
@@ -1570,8 +1572,9 @@ window.addEventListener('resize', () => {
 
 // ── Video ─────────────────────────────────────────────────────────────────────
 
-let localStream:  MediaStream | null = null
-let screenStream: MediaStream | null = null
+let localStream:    MediaStream | null = null   // video only
+let localMicStream: MediaStream | null = null   // audio only, independent of camera
+let screenStream:   MediaStream | null = null
 let micMuted = false
 const localVideo     = document.getElementById('local-video') as HTMLVideoElement
 const toggleVideoBtn = document.getElementById('toggle-video') as HTMLButtonElement
@@ -1586,8 +1589,6 @@ function setCamOn(on: boolean) {
     pipCamBtn.textContent = on ? '📹' : '📷'
     pipCamBtn.classList.toggle('off', !on)
     document.getElementById('pip-local')!.classList.toggle('cam-on', on)
-    toggleAudioBtn.disabled = !on
-    pipMicBtn.disabled = !on
 }
 
 function setMicMuted(muted: boolean) {
@@ -1602,24 +1603,20 @@ function setMicMuted(muted: boolean) {
 async function toggleCamera() {
     if (!localStream) {
         try {
-            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true })
             localVideo.srcObject = localStream
             setCamOn(true)
-            // restore previous mic mute state — new stream has audio enabled by default
-            localStream.getAudioTracks().forEach(t => { t.enabled = !micMuted })
-            setMicMuted(micMuted)
             track('camera_toggled', { on: true })
             sendData({ source: 'cam-state', on: true })
             for (const { pc } of peers.values()) {
                 if (pc.connectionState === 'closed') continue
-                for (const track of localStream.getTracks()) {
-                    // Re-enable path: reuse existing sender to avoid duplicate senders accumulating
-                    const existing = pc.getSenders().find(s => s.track?.kind === track.kind)
-                    if (existing) await existing.replaceTrack(track)
-                    else pc.addTrack(track, localStream!)
+                for (const t of localStream.getVideoTracks()) {
+                    const existing = pc.getSenders().find(s => s.track?.kind === 'video')
+                    if (existing) await existing.replaceTrack(t)
+                    else pc.addTrack(t, localStream!)
                 }
             }
-        } catch { appendMessage('system', 'Camera/mic access denied') }
+        } catch { appendMessage('system', 'Camera access denied') }
     } else {
         if (screenStream) stopScreenShare()
         localStream.getTracks().forEach(t => t.stop())
@@ -1631,13 +1628,31 @@ async function toggleCamera() {
     }
 }
 
-function toggleMic() {
-    if (!localStream) return
-    const enabled = localStream.getAudioTracks().some(t => t.enabled)
-    localStream.getAudioTracks().forEach(t => { t.enabled = !enabled })
-    setMicMuted(enabled) // if was enabled, now muted
-    sendData({ source: 'mic-state', muted: enabled })
-    track('mic_toggled', { muted: enabled })
+async function toggleMic() {
+    if (!localMicStream) {
+        // First use — request mic access and start sending audio
+        try {
+            localMicStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            setMicMuted(false)
+            for (const { pc } of peers.values()) {
+                if (pc.connectionState === 'closed') continue
+                const audioTrack = localMicStream.getAudioTracks()[0]
+                if (!audioTrack) continue
+                const existing = pc.getSenders().find(s => s.track?.kind === 'audio')
+                if (existing) existing.replaceTrack(audioTrack).catch(() => {})
+                else pc.addTrack(audioTrack, localMicStream)
+            }
+            sendData({ source: 'mic-state', muted: false })
+            track('mic_toggled', { muted: false })
+        } catch { appendMessage('system', 'Microphone access denied') }
+    } else {
+        // Subsequent clicks — toggle mute/unmute on existing stream
+        const enabled = localMicStream.getAudioTracks().some(t => t.enabled)
+        localMicStream.getAudioTracks().forEach(t => { t.enabled = !enabled })
+        setMicMuted(enabled)
+        sendData({ source: 'mic-state', muted: enabled })
+        track('mic_toggled', { muted: enabled })
+    }
 }
 
 async function toggleScreen() {
@@ -1967,7 +1982,11 @@ function connectToPeer(peerId: string, isExisting = false) {
         }
     }
 
-    if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream!))
+    if (localStream) localStream.getVideoTracks().forEach(t => pc.addTrack(t, localStream!))
+    if (localMicStream) {
+        const audioTrack = localMicStream.getAudioTracks()[0]
+        if (audioTrack) pc.addTrack(audioTrack, localMicStream)
+    }
     if (screenStream) {
         const screenTrack = screenStream.getVideoTracks()[0]
         const videoSender = pc.getSenders().find(s => s.track?.kind === 'video')
@@ -2011,6 +2030,9 @@ function removePeer(peerId: string) {
 
 function resetPeerState() {
     for (const peerId of [...peers.keys()]) removePeer(peerId)
+    localMicStream?.getTracks().forEach(t => t.stop())
+    localMicStream = null
+    setMicMuted(false)
     msgInput.disabled = true
     sendBtn.disabled  = true
     stopStatsPolling()
