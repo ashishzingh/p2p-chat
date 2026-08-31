@@ -1720,13 +1720,15 @@ pipMicBtn.addEventListener('click', toggleMic)
 // ── WebRTC — full-mesh multi-peer ─────────────────────────────────────────────
 
 interface PeerState {
-    pc:         RTCPeerConnection
-    dc:         RTCDataChannel | null
-    name:       string
-    pending:    RTCIceCandidateInit[]
-    tileEl:     HTMLDivElement
-    videoEl:    HTMLVideoElement
-    isExisting: boolean   // true when we were already in the room when this peer joined
+    pc:          RTCPeerConnection
+    dc:          RTCDataChannel | null
+    name:        string
+    pending:     RTCIceCandidateInit[]
+    tileEl:      HTMLDivElement
+    videoEl:     HTMLVideoElement
+    isExisting:  boolean   // true when we were already in the room when this peer joined
+    makingOffer: boolean   // true while onnegotiationneeded is creating an offer
+    polite:      boolean   // true = yields on glare (myId > peerId)
 }
 
 const peers = new Map<string, PeerState>()
@@ -1906,7 +1908,7 @@ function connectToPeer(peerId: string, isExisting = false) {
     }
 
     const { tileEl, videoEl } = createPeerTile(peerId)
-    const state: PeerState = { pc, dc: null, name: 'Peer', pending: [], tileEl, videoEl, isExisting }
+    const state: PeerState = { pc, dc: null, name: 'Peer', pending: [], tileEl, videoEl, isExisting, makingOffer: false, polite: myId > peerId }
     peers.set(peerId, state)
 
     pc.onicecandidate = ({ candidate }) => {
@@ -1994,16 +1996,20 @@ function connectToPeer(peerId: string, isExisting = false) {
         else pc.addTrack(screenTrack, screenStream!)
     }
 
-    // Smaller ID initiates the offer — no coin-flip or negotiation needed
+    // Perfect negotiation — both sides can renegotiate, glare handled by polite/impolite roles
+    pc.onnegotiationneeded = async () => {
+        try {
+            state.makingOffer = true
+            await pc.setLocalDescription()
+            ws.send(JSON.stringify({ type: 'offer', to: peerId, sdp: pc.localDescription }))
+        } catch (e) { console.warn('offer failed', e) }
+        finally { state.makingOffer = false }
+    }
+
+    // Only smaller ID creates the data channel — prevents both sides creating one simultaneously
     if (myId < peerId) {
         const ch = pc.createDataChannel('main')
         setupDataChannel(ch, peerId)
-        pc.onnegotiationneeded = async () => {
-            try {
-                await pc.setLocalDescription()
-                ws.send(JSON.stringify({ type: 'offer', to: peerId, sdp: pc.localDescription }))
-            } catch (e) { console.warn('offer failed', e) }
-        }
     }
 }
 
@@ -2111,10 +2117,15 @@ function connect() {
             // Ensure we have a PeerState (edge case: peer joined just before us)
             if (!peers.has(fromId)) connectToPeer(fromId)
             const state = peers.get(fromId)!
+
+            // Perfect negotiation glare handling:
+            // Impolite peer (smaller ID) ignores offers that arrive while it is already making one
+            const collision = state.makingOffer || state.pc.signalingState !== 'stable'
+            if (!state.polite && collision) return   // impolite — ignore colliding offer
+
             await state.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp))
             state.pending.splice(0).forEach(c => state.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}))
-            const answer = await state.pc.createAnswer()
-            await state.pc.setLocalDescription(answer)
+            await state.pc.setLocalDescription()     // implicit answer
             ws.send(JSON.stringify({ type: 'answer', to: fromId, sdp: state.pc.localDescription }))
             return
         }
